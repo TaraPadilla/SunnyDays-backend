@@ -39,7 +39,6 @@ class InmuebleController extends Controller
         try {
             $validated = $request->validate([
                 'nombre' => 'required|string|max:255',
-                'codigo' => 'nullable|string|max:255|unique:inmuebles,codigo',
                 'direccion' => 'nullable|string|max:500',
                 'imagen' => 'nullable|image|mimes:jpg,jpeg,png,gif|max:2048',
                 'estado' => 'nullable|boolean'
@@ -53,6 +52,9 @@ class InmuebleController extends Controller
             }
 
             $inmueble = Inmueble::create($validated);
+            
+            // Generar código automáticamente basado en el ID
+            $inmueble->update(['codigo' => 'INM-' . $inmueble->id]);
 
             return response()->json([
                 'status' => 'success',
