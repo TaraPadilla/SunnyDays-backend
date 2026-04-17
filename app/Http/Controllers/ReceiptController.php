@@ -6,6 +6,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Validation\ValidationException;
 
 class ReceiptController extends Controller
 {
@@ -14,29 +15,58 @@ class ReceiptController extends Controller
      */
     public function process(Request $request): JsonResponse
     {
-        // 1. Validación estricta del archivo
-        $request->validate([
-            'document' => 'required|file|mimes:jpg,jpeg,png,pdf|max:4096',
-        ]);
-
         try {
-            $file = $request->file('document');
+            // 1. Validación estricta del archivo
+            $validated = $request->validate([
+                'document' => 'required|file|mimes:jpg,jpeg,png,pdf|max:4096',
+            ]);
 
-            // 2. Envío a n8n (Asegúrate de usar la URL de Test o Production según corresponda)
-            $n8nWebhookUrl = 'https://alianzapruebas.app.n8n.cloud/webhook-test/procesar-documento';
+            $file = $validated['document'];
+            
+            // 2. Validaciones adicionales del archivo
+            if (!$file->isValid()) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'El archivo no es válido o está corrupto.',
+                    'error' => 'Invalid file'
+                ], 400);
+            }
 
-            $response = Http::attach(
-                'data', // Nombre del campo que espera n8n
-                file_get_contents($file->getRealPath()),
-                $file->getClientOriginalName()
-            )->post($n8nWebhookUrl);
+            // 3. Configuración del webhook de n8n
+            $n8nWebhookUrl = env('N8N_WEBHOOK_URL', 'https://alianzapruebas.app.n8n.cloud/webhook-test/procesar-documento');
+            
+            // 4. Preparación de datos para envío
+            $fileContent = file_get_contents($file->getRealPath());
+            $fileName = $file->getClientOriginalName();
+            $mimeType = $file->getMimeType();
 
-            // 3. Verificamos si la respuesta es exitosa
+            // 5. Envío a n8n con timeout (sin reintentos automáticos)
+            $response = Http::timeout(90)
+                ->attach([
+                    'data' => $fileContent,
+                    $fileName,
+                    ['Content-Type' => $mimeType]
+                ])
+                ->post($n8nWebhookUrl);
+
+            // 6. Procesamiento de respuesta exitosa
             if ($response->successful()) {
                 $dataExtraida = $response->json();
+                
+                // 7. Validación de la estructura de respuesta de n8n
+                if (!$this->validateN8nResponse($dataExtraida)) {
+                    return response()->json([
+                        'status' => 'error',
+                        'message' => 'La respuesta del procesador no tiene el formato esperado.',
+                        'received_data' => $dataExtraida
+                    ], 422);
+                }
 
-                // Aquí podrías hacer validaciones extra, por ejemplo:
-                // if (!isset($dataExtraida['amount'])) { ... }
+                // 8. Log de éxito para debugging
+                Log::info('Documento procesado exitosamente', [
+                    'file' => $fileName,
+                    'response' => $dataExtraida
+                ]);
 
                 return response()->json([
                     'status' => 'success',
@@ -45,22 +75,84 @@ class ReceiptController extends Controller
                 ], 200);
             }
 
-            // 4. Manejo de errores de comunicación con n8n
+            // 9. Manejo de errores HTTP específicos
+            $statusCode = $response->status();
+            $errorMessage = $this->getErrorMessage($statusCode, $response->body());
+
             return response()->json([
                 'status' => 'error',
-                'message' => 'El procesador de documentos no respondió correctamente.',
+                'message' => $errorMessage,
+                'status_code' => $statusCode,
                 'details' => $response->body()
-            ], 502);
+            ], $statusCode);
 
+        } catch (ValidationException $e) {
+            // 10. Errores de validación
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Error de validación',
+                'errors' => $e->errors()
+            ], 422);
+            
         } catch (\Exception $e) {
-            // 5. Log de errores inesperados
-            Log::error('Error en ReceiptController: ' . $e->getMessage());
+            // 11. Log de errores inesperados
+            Log::error('Error en ReceiptController: ' . $e->getMessage(), [
+                'trace' => $e->getTraceAsString()
+            ]);
 
             return response()->json([
                 'status' => 'error',
                 'message' => 'Ocurrió un error interno al procesar el archivo.',
                 'error' => $e->getMessage()
             ], 500);
+        }
+    }
+
+    /**
+     * Valida que la respuesta de n8n tenga la estructura esperada
+     */
+    private function validateN8nResponse($data): bool
+    {
+        // Campos mínimos esperados del servicio n8n
+        $requiredFields = ['fecha', 'monto_total'];
+        
+        foreach ($requiredFields as $field) {
+            if (!isset($data[$field])) {
+                Log::warning("Campo requerido faltante en respuesta n8n: {$field}", $data);
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * Obtiene mensaje de error según el código de estado HTTP
+     */
+    private function getErrorMessage(int $statusCode, string $body): string
+    {
+        switch ($statusCode) {
+            case 400:
+                return 'Solicitud incorrecta al procesador de documentos.';
+            case 401:
+                return 'No autorizado para acceder al procesador.';
+            case 403:
+                return 'Acceso prohibido al procesador.';
+            case 404:
+                return 'Servicio de procesamiento no encontrado.';
+            case 408:
+                return 'Tiempo de espera agotado al procesar el documento.';
+            case 429:
+                return 'Demasiadas solicitudes al procesador. Intente más tarde.';
+            case 500:
+                return 'Error interno del procesador de documentos.';
+            case 502:
+                return 'El procesador de documentos no está disponible temporalmente.';
+            case 503:
+                return 'El procesador de documentos no está disponible.';
+            default:
+                Log::warning("Código de estado HTTP no manejado: {$statusCode}", ['body' => $body]);
+                return "Error de comunicación con el procesador (código: {$statusCode}).";
         }
     }
 }

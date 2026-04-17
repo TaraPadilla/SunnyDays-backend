@@ -39,6 +39,7 @@ class GastoController extends Controller
     public function store(Request $request): JsonResponse
     {
         try {
+            // Validate the request - works for both n8n processed data and regular form submission
             $validated = $request->validate([
                 'fecha' => 'required|date',
                 'monto_sin_iva' => 'required|decimal:0,2|min:0',
