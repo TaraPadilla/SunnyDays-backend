@@ -17,7 +17,10 @@ Route::get('/user', function (Request $request) {
 // Esta es la ruta que recibirá la imagen desde React
 Route::post('/process-document', [ReceiptController::class, 'process']);
 
-// Rutas para Inmuebles
+// Ruta para verificar disponibilidad del servicio n8n
+Route::get('/check-n8n-availability', [ReceiptController::class, 'checkN8nAvailability']);
+
+// Ruta para inmuebles
 Route::apiResource('inmuebles', InmuebleController::class);
 Route::post('/inmuebles/{id}/restore', [InmuebleController::class, 'restore']);
 

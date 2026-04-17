@@ -10,6 +10,7 @@ use Illuminate\Validation\ValidationException;
 
 class ReceiptController extends Controller
 {
+    
     /**
      * Procesa el documento enviado desde el frontend y lo manda a n8n.
      */
@@ -33,7 +34,7 @@ class ReceiptController extends Controller
             }
 
             // 3. Configuración del webhook de n8n
-            $n8nWebhookUrl = env('N8N_WEBHOOK_URL', 'https://alianzapruebas.app.n8n.cloud/webhook-test/procesar-documento');
+            $n8nWebhookUrl = env('N8N_WEBHOOK_URL');
             
             // 4. Preparación de datos para envío
             $fileContent = file_get_contents($file->getRealPath());
@@ -94,6 +95,42 @@ class ReceiptController extends Controller
                 'errors' => $e->errors()
             ], 422);
             
+        } catch (\Illuminate\Http\Client\RequestException $e) {
+            // Error de conexión con n8n
+            Log::error('Error de conexión con n8n: ' . $e->getMessage(), [
+                'status_code' => $e->getCode(),
+                'response' => $e->getResponse()?->body(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'status' => 'error',
+                'message' => 'No se pudo conectar con el servicio de procesamiento de documentos. Por favor, intente más tarde.',
+                'error_type' => 'connection_error',
+                'details' => [
+                    'code' => $e->getCode(),
+                    'message' => $e->getMessage()
+                ]
+            ], 503);
+
+        } catch (\Illuminate\Http\Server\RequestException $e) {
+            // Error del servidor n8n
+            Log::error('Error del servidor n8n: ' . $e->getMessage(), [
+                'status_code' => $e->getCode(),
+                'response' => $e->getResponse()?->body(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'status' => 'error',
+                'message' => 'El servicio de procesamiento de documentos está experimentando problemas. Por favor, intente más tarde.',
+                'error_type' => 'server_error',
+                'details' => [
+                    'code' => $e->getCode(),
+                    'message' => $e->getMessage()
+                ]
+            ], 502);
+
         } catch (\Exception $e) {
             // 11. Log de errores inesperados
             Log::error('Error en ReceiptController: ' . $e->getMessage(), [
