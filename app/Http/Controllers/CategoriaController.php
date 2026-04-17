@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Categoria;
+use App\Models\Campo;
 use App\Http\Resources\CategoriaResource;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
@@ -42,9 +43,48 @@ class CategoriaController extends Controller
                 'tipo' => 'required|in:Ingreso,Egreso',
                 'visible_sum' => 'nullable|boolean',
                 'orden' => 'nullable|integer',
-                'campo_id' => 'required|exists:campos,id',
+                'campo_id' => 'nullable|exists:campos,id',
                 'estado' => 'nullable|boolean'
             ]);
+
+            // Auto-assign order if it's 0 or null
+            if (!isset($validated['orden']) || $validated['orden'] === 0) {
+                $maxOrden = Categoria::withTrashed()->max('orden') ?? 0;
+                $validated['orden'] = $maxOrden + 1;
+            }
+
+            // Create default field if not provided
+            if (!isset($validated['campo_id']) || $validated['campo_id'] === null || $validated['campo_id'] === '') {
+                try {
+                    $defaultCampo = Campo::create([
+                        'clave' => 'SUB_' . ($validated['orden'] ?? 1),
+                        'nombre' => $validated['nombre'],
+                        'tipo_calculo' => 'SUM',
+                        'estado' => true
+                    ]);
+                    $validated['campo_id'] = $defaultCampo->id;
+                } catch (\Illuminate\Database\QueryException $e) {
+                    // Handle unique constraint violation
+                    if ($e->getCode() === 23000 && strpos($e->getMessage(), 'UNIQUE') !== false) {
+                        // If clave already exists, try with a different suffix
+                        $suffix = 1;
+                        do {
+                            $newClave = 'SUB_' . ($validated['orden'] ?? 1) . '_' . $suffix;
+                            $suffix++;
+                        } while (Campo::where('clave', $newClave)->exists());
+                        
+                        $defaultCampo = Campo::create([
+                            'clave' => $newClave,
+                            'nombre' => $validated['nombre'],
+                            'tipo_calculo' => 'SUM',
+                            'estado' => true
+                        ]);
+                        $validated['campo_id'] = $defaultCampo->id;
+                    } else {
+                        throw $e;
+                    }
+                }
+            }
 
             $categoria = Categoria::create($validated);
             $categoria->load('campo');

@@ -7,6 +7,7 @@ use App\Http\Controllers\InmuebleController;
 use App\Http\Controllers\CampoController;
 use App\Http\Controllers\CategoriaController;
 use App\Http\Controllers\SubcategoriaController;
+use App\Http\Controllers\GastoController;
 
 Route::get('/user', function (Request $request) {
     return $request->user();
@@ -31,4 +32,8 @@ Route::post('/categorias/{id}/restore', [CategoriaController::class, 'restore'])
 // Rutas para Subcategorías
 Route::apiResource('subcategorias', SubcategoriaController::class);
 Route::post('/subcategorias/{id}/restore', [SubcategoriaController::class, 'restore']);
+
+// Rutas para Gastos
+Route::apiResource('gastos', GastoController::class);
+Route::post('/gastos/{id}/restore', [GastoController::class, 'restore']);
 
