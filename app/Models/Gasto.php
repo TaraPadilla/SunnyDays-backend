@@ -16,6 +16,7 @@ class Gasto extends Model
         'monto_sin_iva',
         'iva',
         'monto_total',
+        'tipo_soporte',
         'descripcion',
         'inmueble_id',
         'categoria_id',

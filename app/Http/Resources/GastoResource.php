@@ -20,6 +20,7 @@ class GastoResource extends JsonResource
             'monto_sin_iva' => $this->monto_sin_iva,
             'iva' => $this->iva,
             'monto_total' => $this->monto_total,
+            'tipo_soporte' => $this->tipo_soporte,
             'descripcion' => $this->descripcion,
             'tipo_pago' => $this->tipo_pago,
             'proveedor' => $this->proveedor,
