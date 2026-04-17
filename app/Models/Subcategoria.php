@@ -6,19 +6,18 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\HasMany;
 
-class Categoria extends Model
+class Subcategoria extends Model
 {
     use HasFactory, SoftDeletes;
 
     // Campos que se pueden asignar masivamente
     protected $fillable = [
         'nombre',
-        'tipo',
-        'visible_sum',
-        'orden',
+        'categoria_id',
         'campo_id',
+        'visible_combo',
+        'orden',
         'estado'
     ];
 
@@ -28,7 +27,7 @@ class Categoria extends Model
     protected function casts(): array
     {
         return [
-            'visible_sum' => 'boolean',
+            'visible_combo' => 'boolean',
             'estado' => 'boolean',
             'created_at' => 'datetime',
             'updated_at' => 'datetime',
@@ -37,18 +36,18 @@ class Categoria extends Model
     }
 
     /**
+     * Relación con Categoria
+     */
+    public function categoria(): BelongsTo
+    {
+        return $this->belongsTo(Categoria::class);
+    }
+
+    /**
      * Relación con Campo
      */
     public function campo(): BelongsTo
     {
         return $this->belongsTo(Campo::class);
-    }
-
-    /**
-     * Relación con Subcategorias
-     */
-    public function subcategorias(): HasMany
-    {
-        return $this->hasMany(Subcategoria::class);
     }
 }
