@@ -39,7 +39,7 @@ class CampoController extends Controller
         try {
             $validated = $request->validate([
                 'clave' => 'required|string|max:255|unique:campos,clave',
-                'nombre' => 'required|string|max:255',
+                'nombre' => 'nullable|string|max:255',
                 'tipo_calculo' => 'required|in:SUM,COMPUESTA,MANUAL',
                 'formula' => 'nullable|string',
                 'estado' => 'nullable|boolean'

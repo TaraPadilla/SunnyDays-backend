@@ -18,7 +18,7 @@ return new class extends Migration
             $table->string('clave')->unique(); 
             
             // Nombre descriptivo (ej: Mantenimiento, Impuestos)
-            $table->string('nombre'); 
+            $table->string('nombre')->nullable(); 
             
             // Tipo de cálculo: 
             // SUM (Suma simple de gastos)
