@@ -43,10 +43,8 @@ class ReceiptController extends Controller
 
             // 5. Envío a n8n con timeout (sin reintentos automáticos)
             $response = Http::timeout(90)
-                ->attach([
-                    'data' => $fileContent,
-                    $fileName,
-                    ['Content-Type' => $mimeType]
+                ->attach('document', $fileContent, $fileName, [
+                    'Content-Type' => $mimeType
                 ])
                 ->post($n8nWebhookUrl);
 
