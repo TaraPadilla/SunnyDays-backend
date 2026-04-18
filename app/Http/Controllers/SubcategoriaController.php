@@ -163,6 +163,39 @@ class SubcategoriaController extends Controller
                 'estado' => 'nullable|boolean'
             ]);
 
+            // Create default field if not provided and subcategoria doesn't have one
+            if ((!isset($validated['campo_id']) || $validated['campo_id'] === null || $validated['campo_id'] === '') && !$subcategoria->campo_id) {
+                try {
+                    $defaultCampo = Campo::create([
+                        'clave' => 'SUB_' . ($validated['orden'] ?? $subcategoria->orden ?? 1),
+                        'nombre' => $validated['nombre'] ?? $subcategoria->nombre,
+                        'tipo_calculo' => 'SUM',
+                        'estado' => true
+                    ]);
+                    $validated['campo_id'] = $defaultCampo->id;
+                } catch (\Illuminate\Database\QueryException $e) {
+                    // Handle unique constraint violation
+                    if ($e->getCode() === 23000 && strpos($e->getMessage(), 'UNIQUE') !== false) {
+                        // If clave already exists, try with a different suffix
+                        $suffix = 1;
+                        do {
+                            $newClave = 'SUB_' . ($validated['orden'] ?? $subcategoria->orden ?? 1) . '_' . $suffix;
+                            $suffix++;
+                        } while (Campo::where('clave', $newClave)->exists());
+                        
+                        $defaultCampo = Campo::create([
+                            'clave' => $newClave,
+                            'nombre' => $validated['nombre'] ?? $subcategoria->nombre,
+                            'tipo_calculo' => 'SUM',
+                            'estado' => true
+                        ]);
+                        $validated['campo_id'] = $defaultCampo->id;
+                    } else {
+                        throw $e;
+                    }
+                }
+            }
+
             $subcategoria->update($validated);
             $subcategoria->load(['categoria', 'campo']);
 
