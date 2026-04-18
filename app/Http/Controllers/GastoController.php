@@ -6,6 +6,7 @@ use App\Models\Gasto;
 use App\Http\Resources\GastoResource;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\Log;
 
 class GastoController extends Controller
 {
@@ -14,17 +15,31 @@ class GastoController extends Controller
      */
     public function index(): JsonResponse
     {
+        Log::info('[GastoController] index: petición recibida', [
+            'method' => request()->method(),
+            'path' => request()->path(),
+        ]);
+
         try {
+            Log::debug('[GastoController] index: consultando gastos con relaciones');
             $gastos = Gasto::with(['inmueble', 'categoria.campo', 'subcategoria.campo'])
                 ->orderBy('fecha', 'desc')
                 ->get();
-            
+
+            Log::info('[GastoController] index: éxito', ['total' => $gastos->count()]);
+
             return response()->json([
                 'status' => 'success',
                 'message' => 'Gastos obtenidos correctamente',
                 'data' => GastoResource::collection($gastos)
             ], 200);
         } catch (\Exception $e) {
+            Log::error('[GastoController] index: excepción', [
+                'message' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
+
             return response()->json([
                 'status' => 'error',
                 'message' => 'Error al obtener gastos',
@@ -38,8 +53,15 @@ class GastoController extends Controller
      */
     public function store(Request $request): JsonResponse
     {
+        Log::info('[GastoController] store: petición recibida', [
+            'method' => $request->method(),
+            'path' => $request->path(),
+            'keys' => array_keys($request->all()),
+        ]);
+
         try {
             // Validate the request - works for both n8n processed data and regular form submission
+            Log::debug('[GastoController] store: validando entrada');
             $validated = $request->validate([
                 'fecha' => 'required|date',
                 'monto_sin_iva' => 'nullable|decimal:0,2|min:0',
@@ -56,8 +78,11 @@ class GastoController extends Controller
                 'observaciones' => 'nullable|string|max:1000'
             ]);
 
+            Log::debug('[GastoController] store: validación OK, creando registro');
             $gasto = Gasto::create($validated);
             $gasto->load(['inmueble', 'categoria.campo', 'subcategoria.campo']);
+
+            Log::info('[GastoController] store: gasto creado', ['gasto_id' => $gasto->id]);
 
             return response()->json([
                 'status' => 'success',
@@ -65,12 +90,22 @@ class GastoController extends Controller
                 'data' => new GastoResource($gasto)
             ], 201);
         } catch (\Illuminate\Validation\ValidationException $e) {
+            Log::warning('[GastoController] store: validación fallida', [
+                'errors' => $e->errors(),
+            ]);
+
             return response()->json([
                 'status' => 'error',
                 'message' => 'Error en la validación',
                 'errors' => $e->errors()
             ], 422);
         } catch (\Exception $e) {
+            Log::error('[GastoController] store: excepción', [
+                'message' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
+
             return response()->json([
                 'status' => 'error',
                 'message' => 'Error al crear gasto',
@@ -84,15 +119,25 @@ class GastoController extends Controller
      */
     public function show(Gasto $gasto): JsonResponse
     {
+        Log::info('[GastoController] show: petición recibida', [
+            'gasto_id' => $gasto->id,
+            'trashed' => $gasto->trashed(),
+        ]);
+
         try {
             if ($gasto->trashed()) {
+                Log::notice('[GastoController] show: gasto eliminado (soft), 404', ['gasto_id' => $gasto->id]);
+
                 return response()->json([
                     'status' => 'error',
                     'message' => 'El gasto no existe o ha sido eliminado'
                 ], 404);
             }
 
+            Log::debug('[GastoController] show: cargando relaciones');
             $gasto->load(['inmueble', 'categoria.campo', 'subcategoria.campo']);
+
+            Log::info('[GastoController] show: éxito', ['gasto_id' => $gasto->id]);
 
             return response()->json([
                 'status' => 'success',
@@ -100,6 +145,13 @@ class GastoController extends Controller
                 'data' => new GastoResource($gasto)
             ], 200);
         } catch (\Exception $e) {
+            Log::error('[GastoController] show: excepción', [
+                'gasto_id' => $gasto->id ?? null,
+                'message' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
+
             return response()->json([
                 'status' => 'error',
                 'message' => 'Error al obtener gasto',
@@ -113,14 +165,23 @@ class GastoController extends Controller
      */
     public function update(Request $request, Gasto $gasto): JsonResponse
     {
+        Log::info('[GastoController] update: petición recibida', [
+            'gasto_id' => $gasto->id,
+            'trashed' => $gasto->trashed(),
+            'keys' => array_keys($request->all()),
+        ]);
+
         try {
             if ($gasto->trashed()) {
+                Log::notice('[GastoController] update: intento sobre gasto eliminado, 404', ['gasto_id' => $gasto->id]);
+
                 return response()->json([
                     'status' => 'error',
                     'message' => 'No se puede actualizar un gasto eliminado'
                 ], 404);
             }
 
+            Log::debug('[GastoController] update: validando entrada');
             $validated = $request->validate([
                 'fecha' => 'required|date',
                 'monto_sin_iva' => 'nullable|decimal:0,2|min:0',
@@ -137,8 +198,11 @@ class GastoController extends Controller
                 'observaciones' => 'nullable|string|max:1000'
             ]);
 
+            Log::debug('[GastoController] update: validación OK, persistiendo');
             $gasto->update($validated);
             $gasto->load(['inmueble', 'categoria.campo', 'subcategoria.campo']);
+
+            Log::info('[GastoController] update: éxito', ['gasto_id' => $gasto->id]);
 
             return response()->json([
                 'status' => 'success',
@@ -146,12 +210,24 @@ class GastoController extends Controller
                 'data' => new GastoResource($gasto)
             ], 200);
         } catch (\Illuminate\Validation\ValidationException $e) {
+            Log::warning('[GastoController] update: validación fallida', [
+                'gasto_id' => $gasto->id,
+                'errors' => $e->errors(),
+            ]);
+
             return response()->json([
                 'status' => 'error',
                 'message' => 'Error en la validación',
                 'errors' => $e->errors()
             ], 422);
         } catch (\Exception $e) {
+            Log::error('[GastoController] update: excepción', [
+                'gasto_id' => $gasto->id ?? null,
+                'message' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
+
             return response()->json([
                 'status' => 'error',
                 'message' => 'Error al actualizar gasto',
@@ -165,21 +241,38 @@ class GastoController extends Controller
      */
     public function destroy(Gasto $gasto): JsonResponse
     {
+        Log::info('[GastoController] destroy: petición recibida', [
+            'gasto_id' => $gasto->id,
+            'trashed' => $gasto->trashed(),
+        ]);
+
         try {
             if ($gasto->trashed()) {
+                Log::notice('[GastoController] destroy: ya estaba eliminado, 404', ['gasto_id' => $gasto->id]);
+
                 return response()->json([
                     'status' => 'error',
                     'message' => 'El gasto ya fue eliminado'
                 ], 404);
             }
 
+            Log::debug('[GastoController] destroy: aplicando soft delete');
             $gasto->delete();
+
+            Log::info('[GastoController] destroy: éxito', ['gasto_id' => $gasto->id]);
 
             return response()->json([
                 'status' => 'success',
                 'message' => 'Gasto eliminado correctamente'
             ], 200);
         } catch (\Exception $e) {
+            Log::error('[GastoController] destroy: excepción', [
+                'gasto_id' => $gasto->id ?? null,
+                'message' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
+
             return response()->json([
                 'status' => 'error',
                 'message' => 'Error al eliminar gasto',
@@ -193,17 +286,40 @@ class GastoController extends Controller
      */
     public function restore($id): JsonResponse
     {
+        Log::info('[GastoController] restore: petición recibida', [
+            'id' => $id,
+            'method' => request()->method(),
+        ]);
+
         try {
+            Log::debug('[GastoController] restore: buscando en papelera');
             $gasto = Gasto::onlyTrashed()->findOrFail($id);
             $gasto->restore();
             $gasto->load(['inmueble', 'categoria.campo', 'subcategoria.campo']);
+
+            Log::info('[GastoController] restore: éxito', ['gasto_id' => $gasto->id]);
 
             return response()->json([
                 'status' => 'success',
                 'message' => 'Gasto restaurado correctamente',
                 'data' => new GastoResource($gasto)
             ], 200);
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            Log::notice('[GastoController] restore: no encontrado en papelera', ['id' => $id]);
+
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Error al restaurar gasto',
+                'error' => $e->getMessage()
+            ], 500);
         } catch (\Exception $e) {
+            Log::error('[GastoController] restore: excepción', [
+                'id' => $id,
+                'message' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
+
             return response()->json([
                 'status' => 'error',
                 'message' => 'Error al restaurar gasto',
