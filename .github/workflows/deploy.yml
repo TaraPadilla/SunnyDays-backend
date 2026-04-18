@@ -10,9 +10,11 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # Checkout the repository
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # Set up SSH access
       - name: Setup SSH
         run: |
           mkdir -p ~/.ssh
@@ -22,34 +24,37 @@ jobs:
           eval "$(ssh-agent -s)"
           ssh-add ~/.ssh/id_rsa
 
+      # Test SSH connection to the server
       - name: Test SSH connection
         run: |
           ssh -vvv -p 21098 sunnenlp@199.188.201.252 "echo SSH OK"
 
+      # Deploy to server
       - name: Deploy to server
         run: |
           ssh -p 21098 sunnenlp@199.188.201.252 << 'EOF'
             cd backend.sunnydaysctg.com
-
-            echo "Pulling latest code..."
-            git pull origin master
-
+            
+            echo "Fetching latest code..."
+            git fetch origin
+            git reset --hard origin/master
+            
             echo "Installing dependencies..."
-            /opt/cpanel/composer/bin/composer install --no-dev --optimize-autoloader
-
+            /opt/cpanel/composer/bin/composer install --no-dev --optimize-autoloader --no-interaction
+            
             echo "Putting app in maintenance mode..."
             php artisan down || true
 
             echo "Running migrations..."
             php artisan migrate --force
-
-            echo "Clearing caches..."
+            
+            echo "Clearing and optimizing caches..."
             php artisan config:clear
             php artisan cache:clear
             php artisan config:cache
             php artisan route:cache
             php artisan view:cache
-
+            
             echo "Bringing app back online..."
             php artisan up || true
 
