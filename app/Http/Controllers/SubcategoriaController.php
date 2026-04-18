@@ -52,8 +52,8 @@ class SubcategoriaController extends Controller
 
             // Auto-assign order if it's 0 or null
             if (!isset($validated['orden']) || $validated['orden'] === 0) {
-                $maxOrden = Subcategoria::withTrashed()->max('orden') ?? 0;
-                $validated['orden'] = $maxOrden + 1;
+                $activeCount = Subcategoria::where('estado', true)->count();
+                $validated['orden'] = $activeCount + 1;
             }
 
             // Create default field if not provided
@@ -162,6 +162,12 @@ class SubcategoriaController extends Controller
                 'orden' => 'nullable|integer',
                 'estado' => 'nullable|boolean'
             ]);
+
+            // Auto-assign order if it's 0 or null
+            if (!isset($validated['orden']) || $validated['orden'] === 0) {
+                $activeCount = Subcategoria::where('estado', true)->count();
+                $validated['orden'] = $activeCount + 1;
+            }
 
             // Create default field if not provided and subcategoria doesn't have one
             if ((!isset($validated['campo_id']) || $validated['campo_id'] === null || $validated['campo_id'] === '') && !$subcategoria->campo_id) {
