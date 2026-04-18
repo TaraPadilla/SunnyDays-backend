@@ -51,18 +51,29 @@ class ReceiptController extends Controller
             // 6. Procesamiento de respuesta exitosa
             if ($response->successful()) {
                 $dataExtraida = $response->json();
-                
-                // 7. Validación de la estructura de respuesta de n8n
-                if (!$this->validateN8nResponse($dataExtraida)) {
+                $dataNormalizada = $this->normalizeN8nResponsePayload($dataExtraida);
+
+                if ($dataNormalizada === null) {
+                    Log::warning('Respuesta n8n vacía o no reconocida', ['raw' => $dataExtraida]);
+
                     return response()->json([
                         'status' => 'error',
                         'message' => 'La respuesta del procesador no tiene el formato esperado.',
-                        'received_data' => $dataExtraida
+                        'received_data' => $dataExtraida,
+                    ], 422);
+                }
+
+                // 7. Validación de la estructura de respuesta de n8n (sobre registro plano)
+                if (!$this->validateN8nResponse($dataNormalizada)) {
+                    return response()->json([
+                        'status' => 'error',
+                        'message' => 'La respuesta del procesador no tiene el formato esperado.',
+                        'received_data' => $dataExtraida,
                     ], 422);
                 }
 
                 // 8. Validar si el OCR pudo interpretar el documento (verificar que no todos los campos sean null)
-                if ($this->allFieldsAreNull($dataExtraida)) {
+                if ($this->allFieldsAreNull($dataNormalizada)) {
                     Log::info('OCR no pudo interpretar el documento', [
                         'file' => $fileName,
                         'response' => $dataExtraida
@@ -72,20 +83,21 @@ class ReceiptController extends Controller
                         'status' => 'error',
                         'message' => 'El OCR no pudo interpretar el documento. Por favor, verifique que el documento sea legible e intente nuevamente.',
                         'error_type' => 'ocr_failed',
-                        'received_data' => $dataExtraida
+                        'received_data' => $dataExtraida,
                     ], 422);
                 }
 
                 // 9. Log de éxito para debugging
                 Log::info('Documento procesado exitosamente', [
                     'file' => $fileName,
-                    'response' => $dataExtraida
+                    'response_raw' => $dataExtraida,
+                    'response_normalized' => $dataNormalizada,
                 ]);
 
                 return response()->json([
                     'status' => 'success',
                     'message' => 'Documento procesado correctamente',
-                    'data' => $dataExtraida
+                    'data' => $dataNormalizada,
                 ], 200);
             }
 
@@ -159,16 +171,62 @@ class ReceiptController extends Controller
     }
 
     /**
+     * Aplana la respuesta de n8n a un único array asociativo de campos (snake_case esperado).
+     * Soporta: lista [{...}], envoltorios data/output/result/body, o el objeto raíz.
+     */
+    private function normalizeN8nResponsePayload(mixed $data): ?array
+    {
+        if ($data === null) {
+            return null;
+        }
+
+        if (is_string($data)) {
+            $decoded = json_decode($data, true);
+            if (! is_array($decoded)) {
+                return null;
+            }
+            $data = $decoded;
+        }
+
+        if (! is_array($data)) {
+            return null;
+        }
+
+        if ($data === []) {
+            return null;
+        }
+
+        // Lista secuencial (ej. [{ "fecha": "..." }])
+        $keys = array_keys($data);
+        $isList = $keys === range(0, count($data) - 1);
+        if ($isList) {
+            $first = $data[0] ?? null;
+
+            return is_array($first) ? $this->normalizeN8nResponsePayload($first) : null;
+        }
+
+        // Envoltorios típicos de n8n / webhooks
+        foreach (['data', 'output', 'result', 'body', 'json'] as $wrap) {
+            if (isset($data[$wrap])) {
+                return $this->normalizeN8nResponsePayload($data[$wrap]);
+            }
+        }
+
+        return $data;
+    }
+
+    /**
      * Valida que la respuesta de n8n tenga la estructura esperada
      */
-    private function validateN8nResponse($data): bool
+    private function validateN8nResponse(array $data): bool
     {
-        // Campos mínimos esperados del servicio n8n
+        // Campos mínimos esperados del servicio n8n (la clave debe existir; el valor puede ser null y lo trata allFieldsAreNull)
         $requiredFields = ['fecha', 'monto_total'];
-        
+
         foreach ($requiredFields as $field) {
-            if (!isset($data[$field])) {
-                Log::warning("Campo requerido faltante en respuesta n8n: {$field}", $data);
+            if (! array_key_exists($field, $data)) {
+                Log::warning("Campo requerido faltante en respuesta n8n: {$field}", ['row' => $data]);
+
                 return false;
             }
         }
@@ -179,21 +237,20 @@ class ReceiptController extends Controller
     /**
      * Verifica si todos los campos importantes del OCR son null
      */
-    private function allFieldsAreNull($data): bool
+    private function allFieldsAreNull(array $data): bool
     {
         // Campos importantes que deberían tener datos si el OCR funcionó
         $importantFields = [
             'monto_sin_iva',
-            'iva', 
+            'iva',
             'monto_total',
             'fecha',
             'numero_comprobante',
             'proveedor',
-            'descripcion'
+            'descripcion',
         ];
 
-        // Si $data no es un array o está vacío, considerarlo como null
-        if (!is_array($data) || empty($data)) {
+        if ($data === []) {
             return true;
         }
 
