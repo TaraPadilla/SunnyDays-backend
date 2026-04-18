@@ -8,6 +8,7 @@ use App\Http\Controllers\CampoController;
 use App\Http\Controllers\CategoriaController;
 use App\Http\Controllers\SubcategoriaController;
 use App\Http\Controllers\GastoController;
+use App\Http\Controllers\UserController;
 
 Route::get('/user', function (Request $request) {
     return $request->user();
@@ -39,4 +40,7 @@ Route::post('/subcategorias/{id}/restore', [SubcategoriaController::class, 'rest
 // Rutas para Gastos
 Route::apiResource('gastos', GastoController::class);
 Route::post('/gastos/{id}/restore', [GastoController::class, 'restore']);
+
+// Rutas para Usuarios
+Route::apiResource('users', UserController::class);
 
