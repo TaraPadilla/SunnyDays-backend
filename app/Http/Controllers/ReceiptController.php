@@ -61,7 +61,22 @@ class ReceiptController extends Controller
                     ], 422);
                 }
 
-                // 8. Log de éxito para debugging
+                // 8. Validar si el OCR pudo interpretar el documento (verificar que no todos los campos sean null)
+                if ($this->allFieldsAreNull($dataExtraida)) {
+                    Log::info('OCR no pudo interpretar el documento', [
+                        'file' => $fileName,
+                        'response' => $dataExtraida
+                    ]);
+                    
+                    return response()->json([
+                        'status' => 'error',
+                        'message' => 'El OCR no pudo interpretar el documento. Por favor, verifique que el documento sea legible e intente nuevamente.',
+                        'error_type' => 'ocr_failed',
+                        'received_data' => $dataExtraida
+                    ], 422);
+                }
+
+                // 9. Log de éxito para debugging
                 Log::info('Documento procesado exitosamente', [
                     'file' => $fileName,
                     'response' => $dataExtraida
@@ -158,6 +173,39 @@ class ReceiptController extends Controller
             }
         }
 
+        return true;
+    }
+
+    /**
+     * Verifica si todos los campos importantes del OCR son null
+     */
+    private function allFieldsAreNull($data): bool
+    {
+        // Campos importantes que deberían tener datos si el OCR funcionó
+        $importantFields = [
+            'monto_sin_iva',
+            'iva', 
+            'monto_total',
+            'fecha',
+            'numero_comprobante',
+            'proveedor',
+            'descripcion'
+        ];
+
+        // Si $data no es un array o está vacío, considerarlo como null
+        if (!is_array($data) || empty($data)) {
+            return true;
+        }
+
+        // Verificar si todos los campos importantes son null
+        foreach ($importantFields as $field) {
+            // Si encontramos al menos un campo que no es null, el OCR funcionó
+            if (isset($data[$field]) && $data[$field] !== null && $data[$field] !== '') {
+                return false;
+            }
+        }
+
+        // Si llegamos aquí, todos los campos importantes son null
         return true;
     }
 
