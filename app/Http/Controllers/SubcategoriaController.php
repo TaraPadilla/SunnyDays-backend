@@ -7,6 +7,7 @@ use App\Models\Campo;
 use App\Http\Resources\SubcategoriaResource;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\Log;
 
 class SubcategoriaController extends Controller
 {
@@ -15,11 +16,15 @@ class SubcategoriaController extends Controller
      */
     public function index(): JsonResponse
     {
+        Log::info('[SubcategoriaController] index: petición recibida');
+        
         try {
             $subcategorias = Subcategoria::where('estado', true)
                 ->with(['categoria', 'campo'])
                 ->orderBy('orden')
                 ->get();
+            
+            Log::info('[SubcategoriaController] index: éxito', ['total' => $subcategorias->count()]);
             
             return response()->json([
                 'status' => 'success',
@@ -27,6 +32,12 @@ class SubcategoriaController extends Controller
                 'data' => SubcategoriaResource::collection($subcategorias)
             ], 200);
         } catch (\Exception $e) {
+            Log::error('[SubcategoriaController] index: excepción', [
+                'message' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine()
+            ]);
+            
             return response()->json([
                 'status' => 'error',
                 'message' => 'Error al obtener subcategorías',
@@ -40,6 +51,10 @@ class SubcategoriaController extends Controller
      */
     public function store(Request $request): JsonResponse
     {
+        Log::info('[SubcategoriaController] store: petición recibida', [
+            'data' => $request->all()
+        ]);
+        
         try {
             $validated = $request->validate([
                 'nombre' => 'required|string|max:255',
@@ -91,6 +106,13 @@ class SubcategoriaController extends Controller
 
             $subcategoria = Subcategoria::create($validated);
             $subcategoria->load(['categoria', 'campo']);
+            
+            Log::info('[SubcategoriaController] store: subcategoría creada', [
+                'subcategoria_id' => $subcategoria->id,
+                'nombre' => $subcategoria->nombre,
+                'categoria_id' => $subcategoria->categoria_id,
+                'campo_id' => $subcategoria->campo_id
+            ]);
 
             return response()->json([
                 'status' => 'success',
@@ -98,12 +120,22 @@ class SubcategoriaController extends Controller
                 'data' => new SubcategoriaResource($subcategoria)
             ], 201);
         } catch (\Illuminate\Validation\ValidationException $e) {
+            Log::warning('[SubcategoriaController] store: validación fallida', [
+                'errors' => $e->errors()
+            ]);
+            
             return response()->json([
                 'status' => 'error',
                 'message' => 'Error en la validación',
                 'errors' => $e->errors()
             ], 422);
         } catch (\Exception $e) {
+            Log::error('[SubcategoriaController] store: excepción', [
+                'message' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine()
+            ]);
+            
             return response()->json([
                 'status' => 'error',
                 'message' => 'Error al crear subcategoría',
@@ -117,8 +149,15 @@ class SubcategoriaController extends Controller
      */
     public function show(Subcategoria $subcategoria): JsonResponse
     {
+        Log::info('[SubcategoriaController] show: petición recibida', [
+            'subcategoria_id' => $subcategoria->id,
+            'trashed' => $subcategoria->trashed()
+        ]);
+        
         try {
             if ($subcategoria->trashed()) {
+                Log::notice('[SubcategoriaController] show: subcategoría eliminada', ['subcategoria_id' => $subcategoria->id]);
+                
                 return response()->json([
                     'status' => 'error',
                     'message' => 'La subcategoría no existe o ha sido eliminada'
@@ -126,6 +165,8 @@ class SubcategoriaController extends Controller
             }
 
             $subcategoria->load(['categoria', 'campo']);
+            
+            Log::info('[SubcategoriaController] show: éxito', ['subcategoria_id' => $subcategoria->id]);
 
             return response()->json([
                 'status' => 'success',
@@ -133,6 +174,13 @@ class SubcategoriaController extends Controller
                 'data' => new SubcategoriaResource($subcategoria)
             ], 200);
         } catch (\Exception $e) {
+            Log::error('[SubcategoriaController] show: excepción', [
+                'subcategoria_id' => $subcategoria->id ?? null,
+                'message' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine()
+            ]);
+            
             return response()->json([
                 'status' => 'error',
                 'message' => 'Error al obtener subcategoría',
@@ -146,8 +194,16 @@ class SubcategoriaController extends Controller
      */
     public function update(Request $request, Subcategoria $subcategoria): JsonResponse
     {
+        Log::info('[SubcategoriaController] update: petición recibida', [
+            'subcategoria_id' => $subcategoria->id,
+            'trashed' => $subcategoria->trashed(),
+            'data' => $request->all()
+        ]);
+        
         try {
             if ($subcategoria->trashed()) {
+                Log::notice('[SubcategoriaController] update: intento sobre subcategoría eliminada', ['subcategoria_id' => $subcategoria->id]);
+                
                 return response()->json([
                     'status' => 'error',
                     'message' => 'No se puede actualizar una subcategoría eliminada'
@@ -169,41 +225,49 @@ class SubcategoriaController extends Controller
                 $validated['orden'] = $activeCount + 1;
             }
 
-            // Create default field if not provided and subcategoria doesn't have one
-            if ((!isset($validated['campo_id']) || $validated['campo_id'] === null || $validated['campo_id'] === '') && !$subcategoria->campo_id) {
-                try {
-                    $defaultCampo = Campo::create([
-                        'clave' => 'SUB_' . ($validated['orden'] ?? $subcategoria->orden ?? 1),
-                        'nombre' => $validated['nombre'] ?? $subcategoria->nombre,
-                        'tipo_calculo' => 'SUM',
-                        'estado' => true
-                    ]);
-                    $validated['campo_id'] = $defaultCampo->id;
-                } catch (\Illuminate\Database\QueryException $e) {
-                    // Handle unique constraint violation
-                    if ($e->getCode() === 23000 && strpos($e->getMessage(), 'UNIQUE') !== false) {
-                        // If clave already exists, try with a different suffix
-                        $suffix = 1;
-                        do {
-                            $newClave = 'SUB_' . ($validated['orden'] ?? $subcategoria->orden ?? 1) . '_' . $suffix;
-                            $suffix++;
-                        } while (Campo::where('clave', $newClave)->exists());
-                        
+            // Si no se proporciona campo_id o es null, mantener el existente o crear uno nuevo si no tiene
+            if (!isset($validated['campo_id']) || $validated['campo_id'] === null || $validated['campo_id'] === '') {
+                if ($subcategoria->campo_id) {
+                    // Mantener el campo_id existente (eliminar campo_id del array para que no se actualice)
+                    unset($validated['campo_id']);
+                } else {
+                    // Crear un nuevo campo si no tiene uno
+                    try {
                         $defaultCampo = Campo::create([
-                            'clave' => $newClave,
+                            'clave' => 'SUB_' . ($validated['orden'] ?? $subcategoria->orden ?? 1),
                             'nombre' => $validated['nombre'] ?? $subcategoria->nombre,
                             'tipo_calculo' => 'SUM',
                             'estado' => true
                         ]);
                         $validated['campo_id'] = $defaultCampo->id;
-                    } else {
-                        throw $e;
+                    } catch (\Illuminate\Database\QueryException $e) {
+                        // Handle unique constraint violation
+                        if ($e->getCode() === 23000 && strpos($e->getMessage(), 'UNIQUE') !== false) {
+                            // If clave already exists, try with a different suffix
+                            $suffix = 1;
+                            do {
+                                $newClave = 'SUB_' . ($validated['orden'] ?? $subcategoria->orden ?? 1) . '_' . $suffix;
+                                $suffix++;
+                            } while (Campo::where('clave', $newClave)->exists());
+                            
+                            $defaultCampo = Campo::create([
+                                'clave' => $newClave,
+                                'nombre' => $validated['nombre'] ?? $subcategoria->nombre,
+                                'tipo_calculo' => 'SUM',
+                                'estado' => true
+                            ]);
+                            $validated['campo_id'] = $defaultCampo->id;
+                        } else {
+                            throw $e;
+                        }
                     }
                 }
             }
 
             $subcategoria->update($validated);
             $subcategoria->load(['categoria', 'campo']);
+            
+            Log::info('[SubcategoriaController] update: éxito', ['subcategoria_id' => $subcategoria->id]);
 
             return response()->json([
                 'status' => 'success',
@@ -211,12 +275,24 @@ class SubcategoriaController extends Controller
                 'data' => new SubcategoriaResource($subcategoria)
             ], 200);
         } catch (\Illuminate\Validation\ValidationException $e) {
+            Log::warning('[SubcategoriaController] update: validación fallida', [
+                'subcategoria_id' => $subcategoria->id,
+                'errors' => $e->errors()
+            ]);
+            
             return response()->json([
                 'status' => 'error',
                 'message' => 'Error en la validación',
                 'errors' => $e->errors()
             ], 422);
         } catch (\Exception $e) {
+            Log::error('[SubcategoriaController] update: excepción', [
+                'subcategoria_id' => $subcategoria->id ?? null,
+                'message' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine()
+            ]);
+            
             return response()->json([
                 'status' => 'error',
                 'message' => 'Error al actualizar subcategoría',
@@ -230,8 +306,15 @@ class SubcategoriaController extends Controller
      */
     public function destroy(Subcategoria $subcategoria): JsonResponse
     {
+        Log::info('[SubcategoriaController] destroy: petición recibida', [
+            'subcategoria_id' => $subcategoria->id,
+            'trashed' => $subcategoria->trashed()
+        ]);
+        
         try {
             if ($subcategoria->trashed()) {
+                Log::notice('[SubcategoriaController] destroy: subcategoría ya eliminada', ['subcategoria_id' => $subcategoria->id]);
+                
                 return response()->json([
                     'status' => 'error',
                     'message' => 'La subcategoría ya fue eliminada'
@@ -239,12 +322,21 @@ class SubcategoriaController extends Controller
             }
 
             $subcategoria->delete();
+            
+            Log::info('[SubcategoriaController] destroy: éxito', ['subcategoria_id' => $subcategoria->id]);
 
             return response()->json([
                 'status' => 'success',
                 'message' => 'Subcategoría eliminada correctamente'
             ], 200);
         } catch (\Exception $e) {
+            Log::error('[SubcategoriaController] destroy: excepción', [
+                'subcategoria_id' => $subcategoria->id ?? null,
+                'message' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine()
+            ]);
+            
             return response()->json([
                 'status' => 'error',
                 'message' => 'Error al eliminar subcategoría',
@@ -258,10 +350,14 @@ class SubcategoriaController extends Controller
      */
     public function restore($id): JsonResponse
     {
+        Log::info('[SubcategoriaController] restore: petición recibida', ['id' => $id]);
+        
         try {
             $subcategoria = Subcategoria::onlyTrashed()->findOrFail($id);
             $subcategoria->restore();
             $subcategoria->load(['categoria', 'campo']);
+            
+            Log::info('[SubcategoriaController] restore: éxito', ['subcategoria_id' => $subcategoria->id]);
 
             return response()->json([
                 'status' => 'success',
@@ -269,6 +365,13 @@ class SubcategoriaController extends Controller
                 'data' => new SubcategoriaResource($subcategoria)
             ], 200);
         } catch (\Exception $e) {
+            Log::error('[SubcategoriaController] restore: excepción', [
+                'id' => $id,
+                'message' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine()
+            ]);
+            
             return response()->json([
                 'status' => 'error',
                 'message' => 'Error al restaurar subcategoría',

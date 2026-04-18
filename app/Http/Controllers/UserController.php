@@ -6,6 +6,7 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 
 class UserController extends Controller
 {
@@ -14,7 +15,11 @@ class UserController extends Controller
      */
     public function index(): JsonResponse
     {
+        Log::info('[UserController] index: petición recibida');
+        
         $users = User::all();
+        
+        Log::info('[UserController] index: éxito', ['total' => $users->count()]);
         
         return response()->json([
             'status' => 'success',
@@ -28,11 +33,21 @@ class UserController extends Controller
      */
     public function store(Request $request): JsonResponse
     {
+        Log::info('[UserController] store: petición recibida', [
+            'data' => $request->all()
+        ]);
+        
         $user = User::create([
             'name' => $request->name,
             'email' => $request->email,
             'password' => Hash::make($request->password),
             'perfil' => $request->perfil ?? 'operador',
+        ]);
+        
+        Log::info('[UserController] store: usuario creado', [
+            'user_id' => $user->id,
+            'email' => $user->email,
+            'perfil' => $user->perfil
         ]);
 
         return response()->json([
@@ -47,7 +62,11 @@ class UserController extends Controller
      */
     public function show(string $id): JsonResponse
     {
+        Log::info('[UserController] show: petición recibida', ['id' => $id]);
+        
         $user = User::findOrFail($id);
+        
+        Log::info('[UserController] show: éxito', ['user_id' => $user->id]);
         
         return response()->json([
             'status' => 'success',
@@ -61,6 +80,11 @@ class UserController extends Controller
      */
     public function update(Request $request, string $id): JsonResponse
     {
+        Log::info('[UserController] update: petición recibida', [
+            'id' => $id,
+            'data' => $request->all()
+        ]);
+        
         $user = User::findOrFail($id);
 
         $user->update([
@@ -71,6 +95,8 @@ class UserController extends Controller
                 ? Hash::make($request->password) 
                 : $user->password,
         ]);
+        
+        Log::info('[UserController] update: éxito', ['user_id' => $user->id]);
 
         return response()->json([
             'status' => 'success',
@@ -84,8 +110,12 @@ class UserController extends Controller
      */
     public function destroy(string $id): JsonResponse
     {
+        Log::info('[UserController] destroy: petición recibida', ['id' => $id]);
+        
         $user = User::findOrFail($id);
         $user->delete();
+        
+        Log::info('[UserController] destroy: éxito', ['user_id' => $user->id]);
 
         return response()->json([
             'status' => 'success',
