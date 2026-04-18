@@ -6,61 +6,293 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Validation\ValidationException;
 
 class ReceiptController extends Controller
 {
+    
     /**
      * Procesa el documento enviado desde el frontend y lo manda a n8n.
      */
     public function process(Request $request): JsonResponse
     {
-        // 1. Validación estricta del archivo
-        $request->validate([
-            'document' => 'required|file|mimes:jpg,jpeg,png,pdf|max:4096',
-        ]);
-
         try {
-            $file = $request->file('document');
+            // 1. Validación estricta del archivo
+            $validated = $request->validate([
+                'document' => 'required|file|mimes:jpg,jpeg,png,pdf|max:4096',
+            ]);
 
-            // 2. Envío a n8n (Asegúrate de usar la URL de Test o Production según corresponda)
-            $n8nWebhookUrl = 'https://alianzapruebas.app.n8n.cloud/webhook-test/procesar-documento';
+            $file = $validated['document'];
+            
+            // 2. Validaciones adicionales del archivo
+            if (!$file->isValid()) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'El archivo no es válido o está corrupto.',
+                    'error' => 'Invalid file'
+                ], 400);
+            }
 
-            $response = Http::attach(
-                'data', // Nombre del campo que espera n8n
-                file_get_contents($file->getRealPath()),
-                $file->getClientOriginalName()
-            )->post($n8nWebhookUrl);
+            // 3. Configuración del webhook de n8n
+            $n8nWebhookUrl = env('N8N_WEBHOOK_URL');
+            
+            // 4. Preparación de datos para envío
+            $fileContent = file_get_contents($file->getRealPath());
+            $fileName = $file->getClientOriginalName();
+            $mimeType = $file->getMimeType();
 
-            // 3. Verificamos si la respuesta es exitosa
+            // 5. Envío a n8n con timeout (sin reintentos automáticos)
+            $response = Http::timeout(90)
+                ->attach('document', $fileContent, $fileName, [
+                    'Content-Type' => $mimeType
+                ])
+                ->post($n8nWebhookUrl);
+
+            // 6. Procesamiento de respuesta exitosa
             if ($response->successful()) {
                 $dataExtraida = $response->json();
+                $dataNormalizada = $this->normalizeN8nResponsePayload($dataExtraida);
 
-                // Aquí podrías hacer validaciones extra, por ejemplo:
-                // if (!isset($dataExtraida['amount'])) { ... }
+                if ($dataNormalizada === null) {
+                    Log::warning('Respuesta n8n vacía o no reconocida', ['raw' => $dataExtraida]);
+
+                    return response()->json([
+                        'status' => 'error',
+                        'message' => 'La respuesta del procesador no tiene el formato esperado.',
+                        'received_data' => $dataExtraida,
+                    ], 422);
+                }
+
+                // 7. Validación de la estructura de respuesta de n8n (sobre registro plano)
+                if (!$this->validateN8nResponse($dataNormalizada)) {
+                    return response()->json([
+                        'status' => 'error',
+                        'message' => 'La respuesta del procesador no tiene el formato esperado.',
+                        'received_data' => $dataExtraida,
+                    ], 422);
+                }
+
+                // 8. Validar si el OCR pudo interpretar el documento (verificar que no todos los campos sean null)
+                if ($this->allFieldsAreNull($dataNormalizada)) {
+                    Log::info('OCR no pudo interpretar el documento', [
+                        'file' => $fileName,
+                        'response' => $dataExtraida
+                    ]);
+                    
+                    return response()->json([
+                        'status' => 'error',
+                        'message' => 'El OCR no pudo interpretar el documento. Por favor, verifique que el documento sea legible e intente nuevamente.',
+                        'error_type' => 'ocr_failed',
+                        'received_data' => $dataExtraida,
+                    ], 422);
+                }
+
+                // 9. Log de éxito para debugging
+                Log::info('Documento procesado exitosamente', [
+                    'file' => $fileName,
+                    'response_raw' => $dataExtraida,
+                    'response_normalized' => $dataNormalizada,
+                ]);
 
                 return response()->json([
                     'status' => 'success',
                     'message' => 'Documento procesado correctamente',
-                    'data' => $dataExtraida
+                    'data' => $dataNormalizada,
                 ], 200);
             }
 
-            // 4. Manejo de errores de comunicación con n8n
+            // 9. Manejo de errores HTTP específicos
+            $statusCode = $response->status();
+            $errorMessage = $this->getErrorMessage($statusCode, $response->body());
+
             return response()->json([
                 'status' => 'error',
-                'message' => 'El procesador de documentos no respondió correctamente.',
+                'message' => $errorMessage,
+                'status_code' => $statusCode,
                 'details' => $response->body()
+            ], $statusCode);
+
+        } catch (ValidationException $e) {
+            // 10. Errores de validación
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Error de validación',
+                'errors' => $e->errors()
+            ], 422);
+            
+        } catch (\Illuminate\Http\Client\RequestException $e) {
+            // Error de conexión con n8n
+            Log::error('Error de conexión con n8n: ' . $e->getMessage(), [
+                'status_code' => $e->getCode(),
+                'response' => $e->getResponse()?->body(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'status' => 'error',
+                'message' => 'No se pudo conectar con el servicio de procesamiento de documentos. Por favor, intente más tarde.',
+                'error_type' => 'connection_error',
+                'details' => [
+                    'code' => $e->getCode(),
+                    'message' => $e->getMessage()
+                ]
+            ], 503);
+
+        } catch (\Illuminate\Http\Server\RequestException $e) {
+            // Error del servidor n8n
+            Log::error('Error del servidor n8n: ' . $e->getMessage(), [
+                'status_code' => $e->getCode(),
+                'response' => $e->getResponse()?->body(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'status' => 'error',
+                'message' => 'El servicio de procesamiento de documentos está experimentando problemas. Por favor, intente más tarde.',
+                'error_type' => 'server_error',
+                'details' => [
+                    'code' => $e->getCode(),
+                    'message' => $e->getMessage()
+                ]
             ], 502);
 
         } catch (\Exception $e) {
-            // 5. Log de errores inesperados
-            Log::error('Error en ReceiptController: ' . $e->getMessage());
+            // 11. Log de errores inesperados
+            Log::error('Error en ReceiptController: ' . $e->getMessage(), [
+                'trace' => $e->getTraceAsString()
+            ]);
 
             return response()->json([
                 'status' => 'error',
                 'message' => 'Ocurrió un error interno al procesar el archivo.',
                 'error' => $e->getMessage()
             ], 500);
+        }
+    }
+
+    /**
+     * Aplana la respuesta de n8n a un único array asociativo de campos (snake_case esperado).
+     * Soporta: lista [{...}], envoltorios data/output/result/body, o el objeto raíz.
+     */
+    private function normalizeN8nResponsePayload(mixed $data): ?array
+    {
+        if ($data === null) {
+            return null;
+        }
+
+        if (is_string($data)) {
+            $decoded = json_decode($data, true);
+            if (! is_array($decoded)) {
+                return null;
+            }
+            $data = $decoded;
+        }
+
+        if (! is_array($data)) {
+            return null;
+        }
+
+        if ($data === []) {
+            return null;
+        }
+
+        // Lista secuencial (ej. [{ "fecha": "..." }])
+        $keys = array_keys($data);
+        $isList = $keys === range(0, count($data) - 1);
+        if ($isList) {
+            $first = $data[0] ?? null;
+
+            return is_array($first) ? $this->normalizeN8nResponsePayload($first) : null;
+        }
+
+        // Envoltorios típicos de n8n / webhooks
+        foreach (['data', 'output', 'result', 'body', 'json'] as $wrap) {
+            if (isset($data[$wrap])) {
+                return $this->normalizeN8nResponsePayload($data[$wrap]);
+            }
+        }
+
+        return $data;
+    }
+
+    /**
+     * Valida que la respuesta de n8n tenga la estructura esperada
+     */
+    private function validateN8nResponse(array $data): bool
+    {
+        // Campos mínimos esperados del servicio n8n (la clave debe existir; el valor puede ser null y lo trata allFieldsAreNull)
+        $requiredFields = ['fecha', 'monto_total'];
+
+        foreach ($requiredFields as $field) {
+            if (! array_key_exists($field, $data)) {
+                Log::warning("Campo requerido faltante en respuesta n8n: {$field}", ['row' => $data]);
+
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * Verifica si todos los campos importantes del OCR son null
+     */
+    private function allFieldsAreNull(array $data): bool
+    {
+        // Campos importantes que deberían tener datos si el OCR funcionó
+        $importantFields = [
+            'monto_sin_iva',
+            'iva',
+            'monto_total',
+            'fecha',
+            'numero_comprobante',
+            'proveedor',
+            'descripcion',
+        ];
+
+        if ($data === []) {
+            return true;
+        }
+
+        // Verificar si todos los campos importantes son null
+        foreach ($importantFields as $field) {
+            // Si encontramos al menos un campo que no es null, el OCR funcionó
+            if (isset($data[$field]) && $data[$field] !== null && $data[$field] !== '') {
+                return false;
+            }
+        }
+
+        // Si llegamos aquí, todos los campos importantes son null
+        return true;
+    }
+
+    /**
+     * Obtiene mensaje de error según el código de estado HTTP
+     */
+    private function getErrorMessage(int $statusCode, string $body): string
+    {
+        switch ($statusCode) {
+            case 400:
+                return 'Solicitud incorrecta al procesador de documentos.';
+            case 401:
+                return 'No autorizado para acceder al procesador.';
+            case 403:
+                return 'Acceso prohibido al procesador.';
+            case 404:
+                return 'Servicio de procesamiento no encontrado.';
+            case 408:
+                return 'Tiempo de espera agotado al procesar el documento.';
+            case 429:
+                return 'Demasiadas solicitudes al procesador. Intente más tarde.';
+            case 500:
+                return 'Error interno del procesador de documentos.';
+            case 502:
+                return 'El procesador de documentos no está disponible temporalmente.';
+            case 503:
+                return 'El procesador de documentos no está disponible.';
+            default:
+                Log::warning("Código de estado HTTP no manejado: {$statusCode}", ['body' => $body]);
+                return "Error de comunicación con el procesador (código: {$statusCode}).";
         }
     }
 }

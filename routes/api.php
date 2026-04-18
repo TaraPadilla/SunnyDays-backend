@@ -3,11 +3,61 @@
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\ReceiptController;
+use App\Http\Controllers\InmuebleController;
+use App\Http\Controllers\CampoController;
+use App\Http\Controllers\CategoriaController;
+use App\Http\Controllers\SubcategoriaController;
+use App\Http\Controllers\GastoController;
+use App\Http\Controllers\UserController;
+use App\Http\Controllers\AuthController;
 
-Route::get('/user', function (Request $request) {
-    return $request->user();
-})->middleware('auth:sanctum');
+/*
+|--------------------------------------------------------------------------
+| Rutas públicas
+|--------------------------------------------------------------------------
+*/
 
+// Login
+Route::post('/login', [AuthController::class, 'login']);
 
-// Esta es la ruta que recibirá la imagen desde React
+// Integración n8n (se dejan públicas por ahora)
 Route::post('/process-document', [ReceiptController::class, 'process']);
+Route::get('/check-n8n-availability', [ReceiptController::class, 'checkN8nAvailability']);
+
+
+/*
+|--------------------------------------------------------------------------
+| Rutas protegidas (requieren token)
+|--------------------------------------------------------------------------
+*/
+
+Route::middleware('auth:sanctum')->group(function () {
+
+    // Usuario autenticado
+    Route::get('/me', [AuthController::class, 'me']);
+    Route::post('/logout', [AuthController::class, 'logout']);
+
+    // Usuarios
+    Route::apiResource('users', UserController::class);
+
+    // Inmuebles
+    Route::apiResource('inmuebles', InmuebleController::class);
+    Route::post('/inmuebles/{id}/restore', [InmuebleController::class, 'restore']);
+
+    // Campos
+    Route::apiResource('campos', CampoController::class);
+    Route::post('/campos/{id}/restore', [CampoController::class, 'restore']);
+
+    // Categorías
+    Route::apiResource('categorias', CategoriaController::class);
+    Route::post('/categorias/{id}/restore', [CategoriaController::class, 'restore']);
+
+    // Subcategorías
+    Route::apiResource('subcategorias', SubcategoriaController::class);
+    Route::post('/subcategorias/{id}/restore', [SubcategoriaController::class, 'restore']);
+
+    // Gastos
+    Route::apiResource('gastos', GastoController::class);
+    Route::post('/gastos/{id}/restore', [GastoController::class, 'restore']);
+
+});
