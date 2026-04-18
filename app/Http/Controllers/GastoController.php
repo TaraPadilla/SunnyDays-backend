@@ -42,7 +42,7 @@ class GastoController extends Controller
             // Validate the request - works for both n8n processed data and regular form submission
             $validated = $request->validate([
                 'fecha' => 'required|date',
-                'monto_sin_iva' => 'required|decimal:0,2|min:0',
+                'monto_sin_iva' => 'nullable|decimal:0,2|min:0',
                 'iva' => 'nullable|decimal:0,2|min:0',
                 'monto_total' => 'required|decimal:0,2|min:0',
                 'tipo_soporte' => 'nullable|in:Factura,Recibo,Ticket,Otro',
@@ -122,15 +122,15 @@ class GastoController extends Controller
             }
 
             $validated = $request->validate([
-                'fecha' => 'nullable|date',
+                'fecha' => 'required|date',
                 'monto_sin_iva' => 'nullable|decimal:0,2|min:0',
                 'iva' => 'nullable|decimal:0,2|min:0',
-                'monto_total' => 'nullable|decimal:0,2|min:0',
+                'monto_total' => 'required|decimal:0,2|min:0',
                 'tipo_soporte' => 'nullable|in:Factura,Recibo,Ticket,Otro',
                 'descripcion' => 'nullable|string|max:1000',
-                'inmueble_id' => 'nullable|exists:inmuebles,id',
-                'categoria_id' => 'nullable|exists:categorias,id',
-                'subcategoria_id' => 'nullable|exists:subcategorias,id',
+                'inmueble_id' => 'required|exists:inmuebles,id',
+                'categoria_id' => 'required|exists:categorias,id',
+                'subcategoria_id' => 'required|exists:subcategorias,id',
                 'tipo_pago' => 'nullable|in:Efectivo,Transferencia,Tarjeta,Otro',
                 'proveedor' => 'nullable|string|max:255',
                 'numero_comprobante' => 'nullable|string|max:255',
