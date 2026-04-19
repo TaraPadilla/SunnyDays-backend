@@ -17,38 +17,31 @@ class GastoController extends Controller
     {
         Log::info('[GastoController] index: petición recibida', [
             'method' => $request->method(),
-            'path' => $request->path(),
-            'filters' => $request->all(['fecha_desde', 'fecha_hasta', 'inmueble_id'])
+            'path' => $request->path()
         ]);
 
         try {
-            Log::debug('[GastoController] index: construyendo consulta con filtros');
-            $query = Gasto::with(['inmueble', 'categoria.campo', 'subcategoria.campo']);
+            Log::debug('[GastoController] index: obteniendo último gasto');
+            $gasto = Gasto::with(['inmueble', 'categoria.campo', 'subcategoria.campo'])
+                ->orderBy('fecha', 'desc')
+                ->first();
 
-            // Aplicar filtros si existen
-            if ($request->filled('fecha_desde')) {
-                $query->whereDate('fecha', '>=', $request->fecha_desde);
-                Log::debug('[GastoController] index: aplicando filtro fecha_desde', ['fecha_desde' => $request->fecha_desde]);
+            if (!$gasto) {
+                Log::info('[GastoController] index: no hay gastos');
+
+                return response()->json([
+                    'status' => 'success',
+                    'message' => 'No hay gastos registrados',
+                    'data' => null
+                ], 200);
             }
 
-            if ($request->filled('fecha_hasta')) {
-                $query->whereDate('fecha', '<=', $request->fecha_hasta);
-                Log::debug('[GastoController] index: aplicando filtro fecha_hasta', ['fecha_hasta' => $request->fecha_hasta]);
-            }
-
-            if ($request->filled('inmueble_id')) {
-                $query->where('inmueble_id', $request->inmueble_id);
-                Log::debug('[GastoController] index: aplicando filtro inmueble_id', ['inmueble_id' => $request->inmueble_id]);
-            }
-
-            $gastos = $query->orderBy('fecha', 'desc')->get();
-
-            Log::info('[GastoController] index: éxito', ['total' => $gastos->count()]);
+            Log::info('[GastoController] index: éxito', ['gasto_id' => $gasto->id]);
 
             return response()->json([
                 'status' => 'success',
-                'message' => 'Gastos obtenidos correctamente',
-                'data' => GastoResource::collection($gastos)
+                'message' => 'Último gasto obtenido correctamente',
+                'data' => new GastoResource($gasto)
             ], 200);
         } catch (\Exception $e) {
             Log::error('[GastoController] index: excepción', [
@@ -59,7 +52,62 @@ class GastoController extends Controller
 
             return response()->json([
                 'status' => 'error',
-                'message' => 'Error al obtener gastos',
+                'message' => 'Error al obtener el último gasto',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Display a filtered listing of gastos.
+     */
+    public function gastosFiltrados(Request $request): JsonResponse
+    {
+        Log::info('[GastoController] gastosFiltrados: petición recibida', [
+            'method' => $request->method(),
+            'path' => $request->path(),
+            'filters' => $request->all(['fecha_desde', 'fecha_hasta', 'inmueble_id'])
+        ]);
+
+        try {
+            Log::debug('[GastoController] gastosFiltrados: construyendo consulta con filtros');
+            $query = Gasto::with(['inmueble', 'categoria.campo', 'subcategoria.campo']);
+
+            // Aplicar filtros si existen
+            if ($request->filled('fecha_desde')) {
+                $query->whereDate('fecha', '>=', $request->fecha_desde);
+                Log::debug('[GastoController] gastosFiltrados: aplicando filtro fecha_desde', ['fecha_desde' => $request->fecha_desde]);
+            }
+
+            if ($request->filled('fecha_hasta')) {
+                $query->whereDate('fecha', '<=', $request->fecha_hasta);
+                Log::debug('[GastoController] gastosFiltrados: aplicando filtro fecha_hasta', ['fecha_hasta' => $request->fecha_hasta]);
+            }
+
+            if ($request->filled('inmueble_id')) {
+                $query->where('inmueble_id', $request->inmueble_id);
+                Log::debug('[GastoController] gastosFiltrados: aplicando filtro inmueble_id', ['inmueble_id' => $request->inmueble_id]);
+            }
+
+            $gastos = $query->orderBy('fecha', 'desc')->get();
+
+            Log::info('[GastoController] gastosFiltrados: éxito', ['total' => $gastos->count()]);
+
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Gastos filtrados obtenidos correctamente',
+                'data' => GastoResource::collection($gastos)
+            ], 200);
+        } catch (\Exception $e) {
+            Log::error('[GastoController] gastosFiltrados: excepción', [
+                'message' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
+
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Error al obtener gastos filtrados',
                 'error' => $e->getMessage()
             ], 500);
         }

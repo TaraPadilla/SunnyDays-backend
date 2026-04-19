@@ -58,6 +58,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Gastos
     Route::apiResource('gastos', GastoController::class);
+    Route::get('/gastos-filtrados', [GastoController::class, 'gastosFiltrados']);
     Route::post('/gastos/{id}/restore', [GastoController::class, 'restore']);
 
 });
