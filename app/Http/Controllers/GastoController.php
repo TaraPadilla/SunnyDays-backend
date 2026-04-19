@@ -175,19 +175,11 @@ class GastoController extends Controller
                     $subcategoria = $gastosSubcategoria->first()->subcategoria;
                     $campo = $subcategoria->campo;
 
-                    $tipoCalculo = $campo ? $campo->tipo_calculo : null;
-                    $valor = 0;
-
-                    if ($campo) {
-                        // Usar el subtotal definido en la subcategoría
-                        $valor = $subcategoria->subtotal();
-                    }
-
                     $balance[$categoriaId]['subcategorias'][$subcategoriaId] = [
                         'id' => $subcategoria->id,
                         'nombre' => $subcategoria->nombre,
-                        'valor' => $valor,
-                        'tipo_calculo' => $tipoCalculo
+                        'valor' => $subcategoria->subtotal(),
+                        'tipo_calculo' => $campo ? $campo->tipo_calculo : null
                     ];
                 }
 
