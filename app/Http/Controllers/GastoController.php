@@ -146,12 +146,59 @@ class GastoController extends Controller
 
             $gastos = $query->orderBy('fecha', 'desc')->get();
 
-            Log::info('[GastoController] generarBalance: éxito', ['total' => $gastos->count()]);
+            Log::debug('[GastoController] generarBalance: calculando balances');
+
+            // Construir el objeto Balance
+            $balance = [];
+
+            // Agrupar gastos por categoría
+            $gastosPorCategoria = $gastos->groupBy(function ($gasto) {
+                return $gasto->categoria->id;
+            });
+
+            foreach ($gastosPorCategoria as $categoriaId => $gastosCategoria) {
+                $categoria = $gastosCategoria->first()->categoria;
+
+                $balance[$categoriaId] = [
+                    'id' => $categoria->id,
+                    'nombre' => $categoria->nombre,
+                    'tipo' => $categoria->tipo,
+                    'subcategorias' => []
+                ];
+
+                // Agrupar por subcategoría dentro de la categoría
+                $gastosPorSubcategoria = $gastosCategoria->groupBy(function ($gasto) {
+                    return $gasto->subcategoria->id;
+                });
+
+                foreach ($gastosPorSubcategoria as $subcategoriaId => $gastosSubcategoria) {
+                    $subcategoria = $gastosSubcategoria->first()->subcategoria;
+                    $campo = $subcategoria->campo;
+
+                    $tipoCalculo = $campo ? $campo->tipo_calculo : null;
+                    $valor = 0;
+
+                    if ($tipoCalculo === 'SUM') {
+                        // Sumar usando el subtotal definido en la subcategoría
+                        $valor = $subcategoria->subtotal();
+                    }
+
+                    $balance[$categoriaId]['subcategorias'][$subcategoriaId] = [
+                        'id' => $subcategoria->id,
+                        'nombre' => $subcategoria->nombre,
+                        'valor' => $valor,
+                        'tipo_calculo' => $tipoCalculo
+                    ];
+                }
+            }
+
+            Log::info('[GastoController] generarBalance: éxito', ['categorias' => count($balance)]);
 
             return response()->json([
                 'status' => 'success',
                 'message' => 'Balance generado correctamente',
-                'data' => GastoResource::collection($gastos)
+                'data' => GastoResource::collection($gastos),
+                'balance' => $balance
             ], 200);
         } catch (\Exception $e) {
             Log::error('[GastoController] generarBalance: excepción', [

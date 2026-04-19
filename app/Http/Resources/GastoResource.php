@@ -39,6 +39,7 @@ class GastoResource extends JsonResource
                     'id' => $this->categoria->campo->id,
                     'clave' => $this->categoria->campo->clave,
                     'nombre' => $this->categoria->campo->nombre,
+                    'tipo_calculo' => $this->categoria->campo->tipo_calculo,
                 ] : null,
             ],
             'subcategoria' => [
@@ -48,6 +49,7 @@ class GastoResource extends JsonResource
                     'id' => $this->subcategoria->campo->id,
                     'clave' => $this->subcategoria->campo->clave,
                     'nombre' => $this->subcategoria->campo->nombre,
+                    'tipo_calculo' => $this->subcategoria->campo->tipo_calculo,
                 ] : null,
             ],
             'created_at' => $this->created_at,
