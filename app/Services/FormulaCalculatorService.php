@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Campo;
 use App\Models\Categoria;
 use App\Models\Subcategoria;
+use Illuminate\Support\Facades\Log;
 
 class FormulaCalculatorService
 {
@@ -14,8 +15,8 @@ class FormulaCalculatorService
     private static $calculationCache = [];
 
     /**
-     * Calcula el subtotal basado en el tipo_calculo del campo
-     * Método principal que delega a los métodos específicos
+     * Calcula el subtotal de una categoría o subcategoría
+     * Este es el método principal que se llama desde el balance
      */
     public static function calculateSubtotal($parentContext): float
     {
@@ -23,60 +24,8 @@ class FormulaCalculatorService
             return 0;
         }
 
-        // Obtener el campo del contexto
-        $campo = null;
-        if ($parentContext instanceof Categoria) {
-            $campo = $parentContext->campo;
-        } elseif ($parentContext instanceof Subcategoria) {
-            $campo = $parentContext->campo;
-        }
-
-        if (!$campo) {
-            return 0;
-        }
-
-        // Delegar según el tipo de cálculo
-        switch ($campo->tipo_calculo) {
-            case 'SUM':
-                return self::calculateSum($parentContext);
-            case 'COMPUESTA':
-                return self::calcularFormula($campo, $parentContext);
-            default:
-                return 0;
-        }
-    }
-
-    /**
-     * Calcula la suma recursiva para tipo SUM
-     */
-    private static function calculateSum($parentContext): float
-    {
-        if ($parentContext instanceof Categoria) {
-            $subtotal = 0;
-            foreach ($parentContext->subcategorias as $subcategoria) {
-                $subtotal += self::calculateSubtotal($subcategoria);
-            }
-            return $subtotal;
-        } elseif ($parentContext instanceof Subcategoria) {
-            return $parentContext->gastos()->sum('monto_total');
-        }
-
-        return 0;
-    }
-
-    /**
-     * Calcula el valor de la fórmula de forma recursiva
-     * Maneja operadores matemáticos con precedencia y paréntesis
-     */
-    public static function calcularFormula(Campo $campo, $parentContext = null): float
-    {
-        // Si el tipo no es COMPUESTA, retornar 0
-        if ($campo->tipo_calculo !== 'COMPUESTA' || !$campo->formula) {
-            return 0;
-        }
-
-        // Evitar cálculos recursivos infinitos
-        $cacheKey = self::generateCacheKey($campo->id, $parentContext);
+        // Generar cache key para evitar recursión infinita
+        $cacheKey = self::generateCacheKey($parentContext);
         if (isset(self::$calculationCache[$cacheKey])) {
             return self::$calculationCache[$cacheKey];
         }
@@ -85,7 +34,7 @@ class FormulaCalculatorService
         self::$calculationCache[$cacheKey] = 0;
 
         try {
-            $result = self::parseAndEvaluateFormula($campo->formula, $parentContext);
+            $result = self::processByType($parentContext);
             self::$calculationCache[$cacheKey] = $result;
             return $result;
         } catch (\Exception $e) {
@@ -96,41 +45,149 @@ class FormulaCalculatorService
     }
 
     /**
-     * Parsea y evalúa la fórmula con manejo de operadores y paréntesis
+     * Procesa según el tipo de cálculo del campo asociado
      */
-    private static function parseAndEvaluateFormula(string $formula, $parentContext = null): float
+    private static function processByType($parentContext): float
     {
-        \Log::debug('[FormulaCalculatorService] parseAndEvaluateFormula: inicio', ['formula' => $formula]);
+        $campo = self::getCampoFromContext($parentContext);
         
-        // Limpiar la fórmula
-        $formula = trim($formula);
-        
-        // Manejar paréntesis - evaluar recursivamente el contenido
-        while (preg_match('/\(([^()]+)\)/', $formula, $matches)) {
-            \Log::debug('[FormulaCalculatorService] parseAndEvaluateFormula: procesando paréntesis', [
-                'parenthesis_content' => $matches[1],
-                'full_match' => $matches[0]
-            ]);
-            
-            $innerResult = self::parseAndEvaluateFormula($matches[1], $parentContext);
-            $formula = str_replace($matches[0], $innerResult, $formula);
-            
-            \Log::debug('[FormulaCalculatorService] parseAndEvaluateFormula: paréntesis resuelto', [
-                'replaced' => $matches[0],
-                'result' => $innerResult,
-                'formula_after' => $formula
-            ]);
+        if (!$campo) {
+            return 0;
         }
 
-        \Log::debug('[FormulaCalculatorService] parseAndEvaluateFormula: fórmula sin paréntesis', ['formula' => $formula]);
+        Log::debug('[FormulaCalculatorService] processByType', [
+            'context_type' => get_class($parentContext),
+            'context_id' => $parentContext->id,
+            'campo_tipo_calculo' => $campo->tipo_calculo,
+            'campo_formula' => $campo->formula
+        ]);
 
+        switch ($campo->tipo_calculo) {
+            case 'SUM':
+                return self::calculateSum($parentContext);
+            case 'COMPUESTA':
+                return self::processFormula($campo, $parentContext);
+            default:
+                return 0;
+        }
+    }
+
+    /**
+     * Obtiene el campo asociado al contexto (categoría o subcategoría)
+     */
+    private static function getCampoFromContext($parentContext): ?Campo
+    {
+        if ($parentContext instanceof Categoria) {
+            return $parentContext->campo;
+        } elseif ($parentContext instanceof Subcategoria) {
+            return $parentContext->campo;
+        }
+        return null;
+    }
+
+    /**
+     * Calcula la suma directa para tipo SUM
+     */
+    private static function calculateSum($parentContext): float
+    {
+        if ($parentContext instanceof Categoria) {
+            // Sumar subtotales de todas las subcategorías
+            $total = 0;
+            foreach ($parentContext->subcategorias as $subcategoria) {
+                $total += self::calculateSubtotal($subcategoria);
+            }
+            
+            Log::debug('[FormulaCalculatorService] calculateSum', [
+                'type' => 'Categoria',
+                'categoria_id' => $parentContext->id,
+                'subcategorias_count' => $parentContext->subcategorias->count(),
+                'total' => $total
+            ]);
+            
+            return $total;
+        } elseif ($parentContext instanceof Subcategoria) {
+            // Sumar montos de todos los gastos
+            $total = $parentContext->gastos()->sum('monto_total');
+            
+            Log::debug('[FormulaCalculatorService] calculateSum', [
+                'type' => 'Subcategoria',
+                'subcategoria_id' => $parentContext->id,
+                'gastos_count' => $parentContext->gastos()->count(),
+                'total' => $total
+            ]);
+            
+            return $total;
+        }
+        
+        return 0;
+    }
+
+    /**
+     * Procesa una fórmula compuesta
+     */
+    private static function processFormula(Campo $campo, $parentContext): float
+    {
+        if (!$campo->formula) {
+            return 0;
+        }
+
+        Log::debug('[FormulaCalculatorService] processFormula', [
+            'campo_id' => $campo->id,
+            'formula' => $campo->formula,
+            'context_id' => $parentContext->id
+        ]);
+
+        return self::evaluateFormula($campo->formula, $parentContext);
+    }
+
+    /**
+     * Evalúa una fórmula matemática
+     */
+    private static function evaluateFormula(string $formula, $parentContext): float
+    {
+        // Primero procesar paréntesis
+        $formula = self::processParentheses($formula, $parentContext);
+        
+        // Luego procesar la fórmula sin paréntesis
+        return self::evaluateSimpleFormula($formula, $parentContext);
+    }
+
+    /**
+     * Procesa paréntesis recursivamente
+     */
+    private static function processParentheses(string $formula, $parentContext): string
+    {
+        while (preg_match('/\(([^()]+)\)/', $formula, $matches)) {
+            $innerFormula = trim($matches[1]);
+            $result = self::evaluateSimpleFormula($innerFormula, $parentContext);
+            $formula = str_replace($matches[0], $result, $formula);
+        }
+        
+        return $formula;
+    }
+
+    /**
+     * Evalúa una fórmula sin paréntesis
+     */
+    private static function evaluateSimpleFormula(string $formula, $parentContext): float
+    {
+        $formula = trim($formula);
+        
         // Tokenizar la fórmula
         $tokens = self::tokenizeFormula($formula);
         
-        // Evaluar con precedencia de operadores
-        $result = self::evaluateTokens($tokens, $parentContext);
+        Log::debug('[FormulaCalculatorService] evaluateSimpleFormula', [
+            'formula' => $formula,
+            'tokens' => $tokens
+        ]);
         
-        \Log::debug('[FormulaCalculatorService] parseAndEvaluateFormula: resultado final', [
+        // Procesar multiplicación y división primero
+        $tokens = self::processMultiplicationDivision($tokens, $parentContext);
+        
+        // Luego procesar suma y resta
+        $result = self::processAdditionSubtraction($tokens, $parentContext);
+        
+        Log::debug('[FormulaCalculatorService] evaluateSimpleFormula result', [
             'formula' => $formula,
             'result' => $result
         ]);
@@ -139,162 +196,49 @@ class FormulaCalculatorService
     }
 
     /**
-     * Tokeniza la fórmula en números, operadores y funciones
-     * Caracteres permitidos:
-     * - Números: 123, 45.67, 0.5
-     * - Claves: SUM, CAT_A, SUB_GEN, CAT_69e42172e983d
-     * - Operadores: +, -, *, /, (, )
+     * Tokeniza una fórmula en números, operadores y palabras clave
      */
     private static function tokenizeFormula(string $formula): array
     {
-        // Patrón que reconoce:
-        // 1. Números decimales: \d+\.?\d*
-        // 2. SUM como palabra clave: SUM\b
-        // 3. Claves alfanuméricas con guiones bajos: [A-Z_][A-Z0-9_a-fA-F-]*
-        // 4. Operadores: [+*/()-]
-        $pattern = '/(\d+\.?\d*|SUM\b|[A-Z_][A-Z0-9_a-fA-F-]*|[+\-*\/\(\)])/';
+        // Patrón para capturar: números, SUM, claves de campo, operadores
+        $pattern = '/(SUM|[A-Z0-9_]+|\d+\.?\d*|[+\-*\/])/';
         preg_match_all($pattern, $formula, $matches);
         
-        $tokens = $matches[1];
-        
-        \Log::debug('[FormulaCalculatorService] tokenizeFormula: fórmula procesada', [
-            'formula' => $formula,
-            'tokens' => $tokens
-        ]);
-        
-        return $tokens;
+        return $matches[0];
     }
 
     /**
-     * Evalúa los tokens con precedencia de operadores
+     * Procesa multiplicación y división
      */
-    private static function evaluateTokens(array $tokens, $parentContext = null): float
+    private static function processMultiplicationDivision(array $tokens, $parentContext): array
     {
-        \Log::debug('[FormulaCalculatorService] evaluateTokens: tokens iniciales', ['tokens' => $tokens]);
-        
-        // Primera pasada: manejar SUM y referencias a campos
-        $evaluatedTokens = [];
+        // Primero resolver todos los tokens no numéricos (SUM y referencias)
+        $resolvedTokens = [];
         foreach ($tokens as $token) {
-            if ($token === 'SUM') {
-                $sumValue = self::handleSumOperation($parentContext);
-                $evaluatedTokens[] = $sumValue;
-                \Log::debug('[FormulaCalculatorService] evaluateTokens: SUM procesado', ['token' => $token, 'value' => $sumValue]);
-            } elseif (preg_match('/^[A-Z_]/', $token) && !is_numeric($token) && !in_array($token, ['+', '-', '*', '/', '(', ')'])) {
-                // Es una clave de campo (empieza con letra y no es operador)
-                $campoValue = self::handleCampoReference($token, $parentContext);
-                $evaluatedTokens[] = $campoValue;
-                \Log::debug('[FormulaCalculatorService] evaluateTokens: campo referenciado', ['token' => $token, 'value' => $campoValue]);
+            if (!is_numeric($token) && !in_array($token, ['*', '/', '+', '-'])) {
+                $resolvedTokens[] = self::getTokenValue($token, $parentContext);
             } else {
-                // Es número u operador
-                $evaluatedTokens[] = $token;
+                $resolvedTokens[] = $token;
             }
         }
-        
-        \Log::debug('[FormulaCalculatorService] evaluateTokens: tokens evaluados', ['evaluatedTokens' => $evaluatedTokens]);
-
-        // Segunda pasada: multiplicación y división
-        $tokens = self::evaluateMultiplicationDivision($evaluatedTokens);
-
-        // Tercera pasada: suma y resta
-        return self::evaluateAdditionSubtraction($tokens);
-    }
-
-    /**
-     * Maneja la operación SUM() - calcula directamente el subtotal sin recursión
-     */
-    private static function handleSumOperation($parentContext): float
-    {
-        \Log::debug('[FormulaCalculatorService] handleSumOperation: iniciando', [
-            'parentContext_type' => $parentContext ? get_class($parentContext) : 'null',
-            'parentContext_id' => $parentContext ? $parentContext->id : 'null'
-        ]);
-
-        if (!$parentContext) {
-            return 0;
-        }
-
-        if ($parentContext instanceof Categoria) {
-            // Calcular directamente la suma de subcategorías sin llamar a subtotal()
-            $subtotal = 0;
-            foreach ($parentContext->subcategorias as $subcategoria) {
-                $subtotal += self::calculateSubtotal($subcategoria);
-            }
-            \Log::debug('[FormulaCalculatorService] handleSumOperation: suma de categorías', [
-                'categoria_id' => $parentContext->id,
-                'subtotal' => $subtotal
-            ]);
-            return $subtotal;
-        } elseif ($parentContext instanceof Subcategoria) {
-            // Calcular directamente la suma de gastos sin llamar a subtotal()
-            $subtotal = $parentContext->gastos()->sum('monto_total');
-            \Log::debug('[FormulaCalculatorService] handleSumOperation: suma de subcategoría', [
-                'subcategoria_id' => $parentContext->id,
-                'subtotal' => $subtotal
-            ]);
-            return $subtotal;
-        }
-
-        return 0;
-    }
-
-    /**
-     * Maneja referencias a otros campos
-     */
-    private static function handleCampoReference(string $clave, $parentContext): float
-    {
-        $campoReferenciado = Campo::where('clave', $clave)->first();
-        
-        if (!$campoReferenciado) {
-            throw new \Exception("Campo con clave '{$clave}' no encontrado");
-        }
-
-        return self::calcularFormula($campoReferenciado, $parentContext);
-    }
-
-    /**
-     * Evalúa multiplicación y división
-     */
-    private static function evaluateMultiplicationDivision(array $tokens): array
-    {
-        \Log::debug('[FormulaCalculatorService] evaluateMultiplicationDivision: tokens iniciales', ['tokens' => $tokens]);
         
         $result = [];
         $i = 0;
         
-        while ($i < count($tokens)) {
-            $token = $tokens[$i];
+        while ($i < count($resolvedTokens)) {
+            $token = $resolvedTokens[$i];
             
-            if (in_array($token, ['*', '/']) && isset($result[count($result) - 1]) && isset($tokens[$i + 1])) {
+            if (in_array($token, ['*', '/']) && isset($result[count($result) - 1]) && isset($resolvedTokens[$i + 1])) {
                 $left = $result[count($result) - 1];
-                $right = $tokens[$i + 1];
+                $right = $resolvedTokens[$i + 1];
                 
-                // Convertir a números si son strings numéricos
+                // Asegurar que ambos operandos sean numéricos
                 $leftValue = is_numeric($left) ? (float)$left : $left;
                 $rightValue = is_numeric($right) ? (float)$right : $right;
                 
-                \Log::debug('[FormulaCalculatorService] evaluateMultiplicationDivision: operación', [
-                    'operator' => $token,
-                    'left' => $left,
-                    'leftValue' => $leftValue,
-                    'right' => $right,
-                    'rightValue' => $rightValue
-                ]);
-                
                 if ($token === '*') {
-                    if (!is_numeric($leftValue) || !is_numeric($rightValue)) {
-                        throw new \Exception("Operandos no numéricos en multiplicación: {$leftValue} * {$rightValue}");
-                    }
                     $result[count($result) - 1] = $leftValue * $rightValue;
                 } else {
-                    if (!is_numeric($rightValue)) {
-                        throw new \Exception("Operador derecho no numérico en división: {$rightValue}");
-                    }
-                    if ($rightValue == 0) {
-                        throw new \Exception("División por cero");
-                    }
-                    if (!is_numeric($leftValue)) {
-                        throw new \Exception("Operador izquierdo no numérico en división: {$leftValue}");
-                    }
                     $result[count($result) - 1] = $leftValue / $rightValue;
                 }
                 
@@ -305,29 +249,30 @@ class FormulaCalculatorService
             }
         }
         
-        \Log::debug('[FormulaCalculatorService] evaluateMultiplicationDivision: tokens finales', ['result' => $result]);
-        
         return $result;
     }
 
     /**
-     * Evalúa suma y resta
+     * Procesa suma y resta
      */
-    private static function evaluateAdditionSubtraction(array $tokens): float
+    private static function processAdditionSubtraction(array $tokens, $parentContext): float
     {
         $result = 0;
-        $currentOperator = '+';
+        $operator = '+';
         
         foreach ($tokens as $token) {
             if (in_array($token, ['+', '-'])) {
-                $currentOperator = $token;
+                $operator = $token;
             } else {
-                $value = is_numeric($token) ? (float)$token : 0;
+                $value = self::getTokenValue($token, $parentContext);
                 
-                if ($currentOperator === '+') {
-                    $result += $value;
+                // Asegurar que el valor sea numérico
+                $numericValue = is_numeric($value) ? (float)$value : $value;
+                
+                if ($operator === '+') {
+                    $result += $numericValue;
                 } else {
-                    $result -= $value;
+                    $result -= $numericValue;
                 }
             }
         }
@@ -336,18 +281,78 @@ class FormulaCalculatorService
     }
 
     /**
-     * Genera una clave única para el cache
+     * Obtiene el valor numérico de un token
      */
-    private static function generateCacheKey($campoId, $parentContext): string
+    private static function getTokenValue(string $token, $parentContext): float
     {
-        $parentKey = $parentContext ? get_class($parentContext) . ':' . $parentContext->id : 'null';
-        return "campo_{$campoId}_parent_{$parentKey}";
+        // Si es un número
+        if (is_numeric($token)) {
+            return (float) $token;
+        }
+        
+        // Si es SUM, retorna el subtotal del contexto actual
+        if ($token === 'SUM') {
+            return self::calculateSum($parentContext);
+        }
+        
+        // Si es una clave de campo, buscar y procesar recursivamente
+        return self::processCampoReference($token);
+    }
+
+    /**
+     * Procesa una referencia a un campo
+     */
+    private static function processCampoReference(string $clave): float
+    {
+        Log::debug('[FormulaCalculatorService] processCampoReference', [
+            'clave' => $clave
+        ]);
+        
+        $campo = Campo::where('clave', $clave)->first();
+        
+        if (!$campo) {
+            Log::warning('[FormulaCalculatorService] Campo no encontrado', ['clave' => $clave]);
+            return 0;
+        }
+        
+        // Buscar la categoría o subcategoría asociada a este campo
+        $categoria = Categoria::where('campo_id', $campo->id)->first();
+        $subcategoria = Subcategoria::where('campo_id', $campo->id)->first();
+        
+        if ($categoria) {
+            Log::debug('[FormulaCalculatorService] Procesando campo con categoría', [
+                'clave' => $clave,
+                'categoria_id' => $categoria->id
+            ]);
+            return self::calculateSubtotal($categoria);
+        } elseif ($subcategoria) {
+            Log::debug('[FormulaCalculatorService] Procesando campo con subcategoría', [
+                'clave' => $clave,
+                'subcategoria_id' => $subcategoria->id
+            ]);
+            return self::calculateSubtotal($subcategoria);
+        }
+        
+        Log::warning('[FormulaCalculatorService] No se encontró categoría/subcategoría asociada', [
+            'clave' => $clave,
+            'campo_id' => $campo->id
+        ]);
+        
+        return 0;
+    }
+
+    /**
+     * Genera una clave de cache única
+     */
+    private static function generateCacheKey($parentContext): string
+    {
+        return get_class($parentContext) . ':' . $parentContext->id;
     }
 
     /**
      * Limpia el cache de cálculos
      */
-    public static function clearCalculationCache(): void
+    public static function clearCache(): void
     {
         self::$calculationCache = [];
     }

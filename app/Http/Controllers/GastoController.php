@@ -151,40 +151,74 @@ class GastoController extends Controller
             // Construir el objeto Balance
             $balance = [];
 
+            // Obtener todas las categorías para incluir las compuestas sin gastos directos
+            $todasLasCategorias = \App\Models\Categoria::with(['campo', 'subcategorias.campo'])->get();
+
             // Agrupar gastos por categoría
             $gastosPorCategoria = $gastos->groupBy(function ($gasto) {
                 return $gasto->categoria->id;
             });
 
-            foreach ($gastosPorCategoria as $categoriaId => $gastosCategoria) {
-                $categoria = $gastosCategoria->first()->categoria;
-
-                $balance[$categoriaId] = [
+            foreach ($todasLasCategorias as $categoria) {
+                $balance[$categoria->id] = [
                     'id' => $categoria->id,
                     'nombre' => $categoria->nombre,
                     'tipo' => $categoria->tipo,
                     'subcategorias' => []
                 ];
 
-                // Agrupar por subcategoría dentro de la categoría
-                $gastosPorSubcategoria = $gastosCategoria->groupBy(function ($gasto) {
-                    return $gasto->subcategoria->id;
-                });
+                // Si la categoría tiene gastos directos, procesarlos
+                if (isset($gastosPorCategoria[$categoria->id])) {
+                    $gastosCategoria = $gastosPorCategoria[$categoria->id];
+                    
+                    // Agrupar por subcategoría dentro de la categoría
+                    $gastosPorSubcategoria = $gastosCategoria->groupBy(function ($gasto) {
+                        return $gasto->subcategoria->id;
+                    });
 
-                foreach ($gastosPorSubcategoria as $subcategoriaId => $gastosSubcategoria) {
-                    $subcategoria = $gastosSubcategoria->first()->subcategoria;
-                    $campo = $subcategoria->campo;
+                    foreach ($gastosPorSubcategoria as $subcategoriaId => $gastosSubcategoria) {
+                        $subcategoria = $gastosSubcategoria->first()->subcategoria;
+                        $campo = $subcategoria->campo;
 
-                    $balance[$categoriaId]['subcategorias'][$subcategoriaId] = [
-                        'id' => $subcategoria->id,
-                        'nombre' => $subcategoria->nombre,
-                        'valor' => $subcategoria->subtotal(),
-                        'tipo_calculo' => $campo ? $campo->tipo_calculo : null
-                    ];
+                        $balance[$categoria->id]['subcategorias'][$subcategoriaId] = [
+                            'id' => $subcategoria->id,
+                            'nombre' => $subcategoria->nombre,
+                            'valor' => $subcategoria->subtotal(),
+                            'tipo_calculo' => $campo ? $campo->tipo_calculo : null
+                        ];
+                    }
+                } else {
+                    // Si no tiene gastos directos pero es compuesta, incluir sus subcategorías
+                    if ($categoria->campo && $categoria->campo->tipo_calculo === 'COMPUESTA') {
+                        foreach ($categoria->subcategorias as $subcategoria) {
+                            $balance[$categoria->id]['subcategorias'][$subcategoria->id] = [
+                                'id' => $subcategoria->id,
+                                'nombre' => $subcategoria->nombre,
+                                'valor' => $subcategoria->subtotal(),
+                                'tipo_calculo' => $subcategoria->campo ? $subcategoria->campo->tipo_calculo : null
+                            ];
+                        }
+                    }
                 }
 
+                // También incluir subcategorías con fórmula COMPUESTA que no tengan gastos directos
+                foreach ($categoria->subcategorias as $subcategoria) {
+                    // Si la subcategoría no está en el balance pero tiene fórmula compuesta, incluirla
+                    if (!isset($balance[$categoria->id]['subcategorias'][$subcategoria->id]) && 
+                        $subcategoria->campo && 
+                        $subcategoria->campo->tipo_calculo === 'COMPUESTA') {
+                        $balance[$categoria->id]['subcategorias'][$subcategoria->id] = [
+                            'id' => $subcategoria->id,
+                            'nombre' => $subcategoria->nombre,
+                            'valor' => $subcategoria->subtotal(),
+                            'tipo_calculo' => $subcategoria->campo ? $subcategoria->campo->tipo_calculo : null
+                        ];
+                    }
+                }
+
+                // Calcular subtotal para todas las categorías (incluidas las compuestas)
                 if ($categoria->visible_sum) {
-                    $balance[$categoriaId]['subtotal'] = $categoria->subtotal();
+                    $balance[$categoria->id]['subtotal'] = $categoria->subtotal();
                 }
             }
 
@@ -234,7 +268,17 @@ class GastoController extends Controller
                 'descripcion' => 'nullable|string|max:1000',
                 'inmueble_id' => 'required|exists:inmuebles,id',
                 'categoria_id' => 'required|exists:categorias,id',
-                'subcategoria_id' => 'required|exists:subcategorias,id',
+                'subcategoria_id' => [
+                    'required',
+                    'exists:subcategorias,id',
+                    function ($attribute, $value, $fail) use ($request) {
+                        // Verificar que la subcategoría pertenezca a la categoría seleccionada
+                        $subcategoria = \App\Models\Subcategoria::find($value);
+                        if ($subcategoria && $subcategoria->categoria_id != $request->categoria_id) {
+                            $fail('La subcategoría seleccionada no pertenece a la categoría seleccionada.');
+                        }
+                    },
+                ],
                 'tipo_pago' => 'nullable|in:Efectivo,Transferencia,Tarjeta,Otro',
                 'proveedor' => 'nullable|string|max:255',
                 'numero_comprobante' => 'nullable|string|max:255',

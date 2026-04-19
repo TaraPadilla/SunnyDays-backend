@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use App\Services\FormulaCalculatorService;
 use App\Models\Gasto;
+use Illuminate\Validation\ValidationException;
 
 class Subcategoria extends Model
 {
@@ -23,6 +24,45 @@ class Subcategoria extends Model
         'orden',
         'estado'
     ];
+
+    /**
+     * Boot del modelo para agregar validaciones
+     */
+    protected static function boot()
+    {
+        parent::boot();
+
+        // Validar antes de guardar
+        static::saving(function ($subcategoria) {
+            $subcategoria->validateCategoriaAssociation();
+        });
+    }
+
+    /**
+     * Valida que la categoría exista y sea válida
+     */
+    public function validateCategoriaAssociation()
+    {
+        if (!$this->categoria_id) {
+            throw ValidationException::withMessages([
+                'categoria_id' => 'La categoría es obligatoria.'
+            ]);
+        }
+
+        $categoria = Categoria::find($this->categoria_id);
+        
+        if (!$categoria) {
+            throw ValidationException::withMessages([
+                'categoria_id' => 'La categoría seleccionada no existe.'
+            ]);
+        }
+
+        if (!$categoria->estado) {
+            throw ValidationException::withMessages([
+                'categoria_id' => 'La categoría seleccionada está inactiva.'
+            ]);
+        }
+    }
 
     /**
      * Definición de tipos de datos (Casts)
