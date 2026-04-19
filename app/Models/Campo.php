@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Campo extends Model
 {
@@ -30,5 +31,21 @@ class Campo extends Model
             'updated_at' => 'datetime',
             'deleted_at' => 'datetime',
         ];
+    }
+
+    /**
+     * Relación con Categorías
+     */
+    public function categorias(): HasMany
+    {
+        return $this->hasMany(Categoria::class);
+    }
+
+    /**
+     * Relación con Subcategorías
+     */
+    public function subcategorias(): HasMany
+    {
+        return $this->hasMany(Subcategoria::class);
     }
 }

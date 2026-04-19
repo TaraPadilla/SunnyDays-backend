@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-
+use App\Services\FormulaCalculatorService;
 use App\Models\Gasto;
 
 class Subcategoria extends Model
@@ -63,24 +63,10 @@ class Subcategoria extends Model
     }
 
     /**
-     * Calcula el subtotal de todos los gastos de esta subcategoría
-     * solo si el campo relacionado tiene tipo_calculo = 'SUM'.
-     * Temporalmente, si es 'COMPUESTA', devuelve 2000.
+     * Calcula el subtotal delegando toda la lógica al FormulaCalculatorService
      */
     public function subtotal()
     {
-        $campo = $this->campo;
-
-        if (!$campo) {
-            return 0;
-        } else {
-            if ($campo->tipo_calculo === 'SUM') {
-                return $this->gastos()->sum('monto_total');
-            } elseif ($campo->tipo_calculo === 'COMPUESTA') {
-                return 2000;
-            } else {
-                return 0;
-            }
-        }
+        return FormulaCalculatorService::calculateSubtotal($this);
     }
 }
