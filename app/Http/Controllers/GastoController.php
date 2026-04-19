@@ -11,20 +11,37 @@ use Illuminate\Support\Facades\Log;
 class GastoController extends Controller
 {
     /**
-     * Display a listing of gastos.
+     * Display a listing of gastos with optional filters.
      */
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
         Log::info('[GastoController] index: petición recibida', [
-            'method' => request()->method(),
-            'path' => request()->path(),
+            'method' => $request->method(),
+            'path' => $request->path(),
+            'filters' => $request->all(['fecha_desde', 'fecha_hasta', 'inmueble_id'])
         ]);
 
         try {
-            Log::debug('[GastoController] index: consultando gastos con relaciones');
-            $gastos = Gasto::with(['inmueble', 'categoria.campo', 'subcategoria.campo'])
-                ->orderBy('fecha', 'desc')
-                ->get();
+            Log::debug('[GastoController] index: construyendo consulta con filtros');
+            $query = Gasto::with(['inmueble', 'categoria.campo', 'subcategoria.campo']);
+
+            // Aplicar filtros si existen
+            if ($request->filled('fecha_desde')) {
+                $query->whereDate('fecha', '>=', $request->fecha_desde);
+                Log::debug('[GastoController] index: aplicando filtro fecha_desde', ['fecha_desde' => $request->fecha_desde]);
+            }
+
+            if ($request->filled('fecha_hasta')) {
+                $query->whereDate('fecha', '<=', $request->fecha_hasta);
+                Log::debug('[GastoController] index: aplicando filtro fecha_hasta', ['fecha_hasta' => $request->fecha_hasta]);
+            }
+
+            if ($request->filled('inmueble_id')) {
+                $query->where('inmueble_id', $request->inmueble_id);
+                Log::debug('[GastoController] index: aplicando filtro inmueble_id', ['inmueble_id' => $request->inmueble_id]);
+            }
+
+            $gastos = $query->orderBy('fecha', 'desc')->get();
 
             Log::info('[GastoController] index: éxito', ['total' => $gastos->count()]);
 
