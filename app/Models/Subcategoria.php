@@ -50,4 +50,20 @@ class Subcategoria extends Model
     {
         return $this->belongsTo(Campo::class);
     }
+
+    /**
+     * Relación con Gastos
+     */
+    public function gastos()
+    {
+        return $this->hasMany(Gasto::class);
+    }
+
+    /**
+     * Calcula el subtotal de todos los gastos de esta subcategoría
+     */
+    public function subtotal()
+    {
+        return $this->gastos()->sum('monto_total');
+    }
 }
