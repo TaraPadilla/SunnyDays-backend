@@ -200,8 +200,9 @@ class FormulaCalculatorService
      */
     private static function tokenizeFormula(string $formula): array
     {
-        // Patrón para capturar: números, SUM, claves de campo, operadores
-        $pattern = '/(SUM|[A-Z0-9_]+|\d+\.?\d*|[+\-*\/])/';
+        // Patrón para capturar: SUM, identificadores alfanuméricos (incluyendo hex), números, operadores
+        // Los identificadores pueden contener: letras mayúsculas, números, guiones bajos, y caracteres hex
+        $pattern = '/(SUM|[A-Z][A-Z0-9a-f_]*|\d+\.?\d*|[+\-*\/])/';
         preg_match_all($pattern, $formula, $matches);
         
         return $matches[0];
