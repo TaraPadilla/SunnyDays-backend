@@ -114,6 +114,61 @@ class GastoController extends Controller
     }
 
     /**
+     * Generate balance data with filters.
+     */
+    public function generarBalance(Request $request): JsonResponse
+    {
+        Log::info('[GastoController] generarBalance: petición recibida', [
+            'method' => $request->method(),
+            'path' => $request->path(),
+            'filters' => $request->all(['fecha_desde', 'fecha_hasta', 'inmueble_id'])
+        ]);
+
+        try {
+            Log::debug('[GastoController] generarBalance: construyendo consulta con filtros');
+            $query = Gasto::with(['inmueble', 'categoria.campo', 'subcategoria.campo']);
+
+            // Aplicar filtros si existen
+            if ($request->filled('fecha_desde')) {
+                $query->whereDate('fecha', '>=', $request->fecha_desde);
+                Log::debug('[GastoController] generarBalance: aplicando filtro fecha_desde', ['fecha_desde' => $request->fecha_desde]);
+            }
+
+            if ($request->filled('fecha_hasta')) {
+                $query->whereDate('fecha', '<=', $request->fecha_hasta);
+                Log::debug('[GastoController] generarBalance: aplicando filtro fecha_hasta', ['fecha_hasta' => $request->fecha_hasta]);
+            }
+
+            if ($request->filled('inmueble_id')) {
+                $query->where('inmueble_id', $request->inmueble_id);
+                Log::debug('[GastoController] generarBalance: aplicando filtro inmueble_id', ['inmueble_id' => $request->inmueble_id]);
+            }
+
+            $gastos = $query->orderBy('fecha', 'desc')->get();
+
+            Log::info('[GastoController] generarBalance: éxito', ['total' => $gastos->count()]);
+
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Balance generado correctamente',
+                'data' => GastoResource::collection($gastos)
+            ], 200);
+        } catch (\Exception $e) {
+            Log::error('[GastoController] generarBalance: excepción', [
+                'message' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
+
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Error al generar balance',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
      * Store a newly created gasto in storage.
      */
     public function store(Request $request): JsonResponse
