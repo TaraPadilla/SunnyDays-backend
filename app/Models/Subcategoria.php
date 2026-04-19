@@ -64,9 +64,23 @@ class Subcategoria extends Model
 
     /**
      * Calcula el subtotal de todos los gastos de esta subcategoría
+     * solo si el campo relacionado tiene tipo_calculo = 'SUM'.
+     * Temporalmente, si es 'COMPUESTA', devuelve 2000.
      */
     public function subtotal()
     {
-        return $this->gastos()->sum('monto_total');
+        $campo = $this->campo;
+
+        if (!$campo) {
+            return 0;
+        } else {
+            if ($campo->tipo_calculo === 'SUM') {
+                return $this->gastos()->sum('monto_total');
+            } elseif ($campo->tipo_calculo === 'COMPUESTA') {
+                return 2000;
+            } else {
+                return 0;
+            }
+        }
     }
 }
