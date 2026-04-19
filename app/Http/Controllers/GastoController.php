@@ -171,6 +171,8 @@ class GastoController extends Controller
                     return $gasto->subcategoria->id;
                 });
 
+                $categorySubtotal = 0;
+
                 foreach ($gastosPorSubcategoria as $subcategoriaId => $gastosSubcategoria) {
                     $subcategoria = $gastosSubcategoria->first()->subcategoria;
                     $campo = $subcategoria->campo;
@@ -183,12 +185,18 @@ class GastoController extends Controller
                         $valor = $subcategoria->subtotal();
                     }
 
+                    $categorySubtotal += $valor;
+
                     $balance[$categoriaId]['subcategorias'][$subcategoriaId] = [
                         'id' => $subcategoria->id,
                         'nombre' => $subcategoria->nombre,
                         'valor' => $valor,
                         'tipo_calculo' => $tipoCalculo
                     ];
+                }
+
+                if ($categoria->visible_sum) {
+                    $balance[$categoriaId]['subtotal'] = $categorySubtotal;
                 }
             }
 
