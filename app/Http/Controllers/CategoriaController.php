@@ -70,35 +70,13 @@ class CategoriaController extends Controller
 
             // Create default field if not provided
             if (!isset($validated['campo_id']) || $validated['campo_id'] === null || $validated['campo_id'] === '') {
-                try {
-                    $defaultCampo = Campo::create([
-                        'clave' => 'SUB_' . ($validated['orden'] ?? 1),
-                        'nombre' => $validated['nombre'],
-                        'tipo_calculo' => 'SUM',
-                        'estado' => true
-                    ]);
-                    $validated['campo_id'] = $defaultCampo->id;
-                } catch (\Illuminate\Database\QueryException $e) {
-                    // Handle unique constraint violation
-                    if ($e->getCode() === 23000 && strpos($e->getMessage(), 'UNIQUE') !== false) {
-                        // If clave already exists, try with a different suffix
-                        $suffix = 1;
-                        do {
-                            $newClave = 'SUB_' . ($validated['orden'] ?? 1) . '_' . $suffix;
-                            $suffix++;
-                        } while (Campo::where('clave', $newClave)->exists());
-                        
-                        $defaultCampo = Campo::create([
-                            'clave' => $newClave,
-                            'nombre' => $validated['nombre'],
-                            'tipo_calculo' => 'SUM',
-                            'estado' => true
-                        ]);
-                        $validated['campo_id'] = $defaultCampo->id;
-                    } else {
-                        throw $e;
-                    }
-                }
+                $defaultCampo = Campo::create([
+                    'clave' => 'CAT_' . uniqid(),
+                    'nombre' => $validated['nombre'],
+                    'tipo_calculo' => 'SUM',
+                    'estado' => true
+                ]);
+                $validated['campo_id'] = $defaultCampo->id;
             }
 
             $categoria = Categoria::create($validated);
@@ -228,35 +206,13 @@ class CategoriaController extends Controller
                     unset($validated['campo_id']);
                 } else {
                     // Crear un nuevo campo si no tiene uno
-                    try {
-                        $defaultCampo = Campo::create([
-                            'clave' => 'SUB_' . ($validated['orden'] ?? $categoria->orden ?? 1),
-                            'nombre' => $validated['nombre'] ?? $categoria->nombre,
-                            'tipo_calculo' => 'SUM',
-                            'estado' => true
-                        ]);
-                        $validated['campo_id'] = $defaultCampo->id;
-                    } catch (\Illuminate\Database\QueryException $e) {
-                        // Handle unique constraint violation
-                        if ($e->getCode() === 23000 && strpos($e->getMessage(), 'UNIQUE') !== false) {
-                            // If clave already exists, try with a different suffix
-                            $suffix = 1;
-                            do {
-                                $newClave = 'SUB_' . ($validated['orden'] ?? $categoria->orden ?? 1) . '_' . $suffix;
-                                $suffix++;
-                            } while (Campo::where('clave', $newClave)->exists());
-                            
-                            $defaultCampo = Campo::create([
-                                'clave' => $newClave,
-                                'nombre' => $validated['nombre'] ?? $categoria->nombre,
-                                'tipo_calculo' => 'SUM',
-                                'estado' => true
-                            ]);
-                            $validated['campo_id'] = $defaultCampo->id;
-                        } else {
-                            throw $e;
-                        }
-                    }
+                    $defaultCampo = Campo::create([
+                        'clave' => 'CAT_' . uniqid(),
+                        'nombre' => $validated['nombre'] ?? $categoria->nombre,
+                        'tipo_calculo' => 'SUM',
+                        'estado' => true
+                    ]);
+                    $validated['campo_id'] = $defaultCampo->id;
                 }
             }
 
