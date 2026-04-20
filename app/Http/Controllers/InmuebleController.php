@@ -18,7 +18,9 @@ class InmuebleController extends Controller
         Log::info('[InmuebleController] index: petición recibida');
         
         try {
-            $inmuebles = Inmueble::where('estado', true)->get();
+            //Inmuebles no eliminados no validar estado
+            $inmuebles = Inmueble::all();
+
             
             Log::info('[InmuebleController] index: éxito', ['total' => $inmuebles->count()]);
             
@@ -69,6 +71,11 @@ class InmuebleController extends Controller
                     'ruta' => $rutaImagen,
                     'nombre_original' => $imagen->getClientOriginalName()
                 ]);
+            }
+
+            //Estado por defecto true si no viene
+            if (!isset($validated['estado'])) {
+                $validated['estado'] = true;
             }
 
             $inmueble = Inmueble::create($validated);
