@@ -89,7 +89,7 @@ class GastoController extends Controller
                 Log::debug('[GastoController] gastosFiltrados: aplicando filtro inmueble_id', ['inmueble_id' => $request->inmueble_id]);
             }
 
-            $gastos = $query->orderBy('fecha', 'desc')->get();
+            $gastos = $query->orderBy('id', 'desc')->get();
 
             Log::info('[GastoController] gastosFiltrados: éxito', ['total' => $gastos->count()]);
 
@@ -144,7 +144,7 @@ class GastoController extends Controller
                 Log::debug('[GastoController] generarBalance: aplicando filtro inmueble_id', ['inmueble_id' => $request->inmueble_id]);
             }
 
-            $gastos = $query->orderBy('fecha', 'desc')->get();
+            $gastos = $query->orderBy('id', 'desc')->get();
 
             Log::debug('[GastoController] generarBalance: calculando balances');
 

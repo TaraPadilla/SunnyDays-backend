@@ -8,6 +8,7 @@ use App\Http\Controllers\CampoController;
 use App\Http\Controllers\CategoriaController;
 use App\Http\Controllers\SubcategoriaController;
 use App\Http\Controllers\GastoController;
+use App\Http\Controllers\SoporteGastoController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\AuthController;
 
@@ -61,5 +62,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/gastos-filtrados', [GastoController::class, 'gastosFiltrados']);
     Route::get('/generar-balance', [GastoController::class, 'generarBalance']);
     Route::post('/gastos/{id}/restore', [GastoController::class, 'restore']);
+
+    // Soportes de Gastos
+    Route::apiResource('soporte-gastos', SoporteGastoController::class);
+    Route::post('/soporte-gastos/{id}/restore', [SoporteGastoController::class, 'restore']);
+    Route::post('/soporte-gastos/upload', [SoporteGastoController::class, 'uploadFile']);
 
 });

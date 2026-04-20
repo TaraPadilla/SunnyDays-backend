@@ -96,4 +96,12 @@ class Gasto extends Model
     {
         return $this->belongsTo(Subcategoria::class);
     }
+
+    /**
+     * Relación con Soportes de Gasto (Un gasto -> N soportes)
+     */
+    public function soportes()
+    {
+        return $this->hasMany(SoporteGasto::class);
+    }
 }
