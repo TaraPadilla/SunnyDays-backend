@@ -152,7 +152,9 @@ class GastoController extends Controller
             $balance = [];
 
             // Obtener todas las categorías para incluir las compuestas sin gastos directos
-            $todasLasCategorias = \App\Models\Categoria::with(['campo', 'subcategorias.campo'])->get();
+            $todasLasCategorias = \App\Models\Categoria::with(['campo', 'subcategorias.campo'])
+                ->orderBy('orden', 'asc')
+                ->get();
 
             // Agrupar gastos por categoría
             $gastosPorCategoria = $gastos->groupBy(function ($gasto) {
@@ -164,6 +166,7 @@ class GastoController extends Controller
                     'id' => $categoria->id,
                     'nombre' => $categoria->nombre,
                     'tipo' => $categoria->tipo,
+                    'orden' => $categoria->orden,
                     'subcategorias' => []
                 ];
 
@@ -190,7 +193,8 @@ class GastoController extends Controller
                 } else {
                     // Si no tiene gastos directos pero es compuesta, incluir sus subcategorías
                     if ($categoria->campo && $categoria->campo->tipo_calculo === 'COMPUESTA') {
-                        foreach ($categoria->subcategorias as $subcategoria) {
+                        $subcategoriasOrdenadas = $categoria->subcategorias->sortBy('orden');
+                        foreach ($subcategoriasOrdenadas as $subcategoria) {
                             $balance[$categoria->id]['subcategorias'][$subcategoria->id] = [
                                 'id' => $subcategoria->id,
                                 'nombre' => $subcategoria->nombre,
@@ -211,6 +215,7 @@ class GastoController extends Controller
                             'id' => $subcategoria->id,
                             'nombre' => $subcategoria->nombre,
                             'valor' => $subcategoria->subtotal(),
+                            'orden' => $subcategoria->orden,
                             'tipo_calculo' => $subcategoria->campo ? $subcategoria->campo->tipo_calculo : null
                         ];
                     }
