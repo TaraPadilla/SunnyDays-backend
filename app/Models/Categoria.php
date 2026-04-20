@@ -20,6 +20,7 @@ class Categoria extends Model
         'visible_sum',
         'orden',
         'campo_id',
+        'visible_combo',
         'estado'
     ];
 
@@ -30,6 +31,7 @@ class Categoria extends Model
     {
         return [
             'visible_sum' => 'boolean',
+            'visible_combo' => 'boolean',
             'estado' => 'boolean',
             'created_at' => 'datetime',
             'updated_at' => 'datetime',

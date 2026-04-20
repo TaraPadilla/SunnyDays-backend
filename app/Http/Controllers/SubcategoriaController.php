@@ -19,12 +19,27 @@ class SubcategoriaController extends Controller
         Log::info('[SubcategoriaController] index: petición recibida');
         
         try {
-            $subcategorias = Subcategoria::where('estado', true)
-                ->with(['categoria', 'campo'])
-                ->orderBy('orden')
-                ->get();
+            $user = auth()->user();
+            $isAdmin = $user && $user->perfil === 'admin';
             
-            Log::info('[SubcategoriaController] index: éxito', ['total' => $subcategorias->count()]);
+            $query = Subcategoria::where('estado', true)
+                ->with(['categoria', 'campo'])
+                ->orderBy('orden');
+            
+            // If not admin, only return subcategories under expense categories
+            if (!$isAdmin) {
+                $query->whereHas('categoria', function($categoryQuery) {
+                    $categoryQuery->where('tipo', 'Egreso');
+                });
+            }
+            
+            $subcategorias = $query->get();
+            
+            Log::info('[SubcategoriaController] index: éxito', [
+                'total' => $subcategorias->count(),
+                'is_admin' => $isAdmin,
+                'filter' => !$isAdmin ? 'Egreso categories only' : 'none'
+            ]);
             
             return response()->json([
                 'status' => 'success',

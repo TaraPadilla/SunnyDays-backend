@@ -19,9 +19,25 @@ class CategoriaController extends Controller
         Log::info('[CategoriaController] index: petición recibida');
         
         try {
-            $categorias = Categoria::where('estado', true)->with('campo')->get();
+            $user = auth()->user();
+            $isAdmin = $user && $user->perfil === 'admin';
             
-            Log::info('[CategoriaController] index: éxito', ['total' => $categorias->count()]);
+            $query = Categoria::where('estado', true)->with(['campo', 'subcategorias' => function($query) {
+                $query->where('estado', true)->orderBy('orden');
+            }]);
+            
+            // If not admin, only return expense categories
+            if (!$isAdmin) {
+                $query->where('tipo', 'Egreso');
+            }
+            
+            $categorias = $query->get();
+            
+            Log::info('[CategoriaController] index: éxito', [
+                'total' => $categorias->count(),
+                'is_admin' => $isAdmin,
+                'filter' => !$isAdmin ? 'Egreso' : 'none'
+            ]);
             
             return response()->json([
                 'status' => 'success',
@@ -59,6 +75,7 @@ class CategoriaController extends Controller
                 'visible_sum' => 'nullable|boolean',
                 'orden' => 'nullable|integer',
                 'campo_id' => 'nullable|exists:campos,id',
+                'visible_combo' => 'nullable|boolean',
                 'estado' => 'nullable|boolean'
             ]);
 
@@ -79,7 +96,15 @@ class CategoriaController extends Controller
                 $validated['campo_id'] = $defaultCampo->id;
             }
 
-            $categoria = Categoria::create($validated);
+            $categoria = Categoria::create([
+                'nombre' => $validated['nombre'],
+                'tipo' => $validated['tipo'],
+                'visible_sum' => $validated['visible_sum'] ?? true,
+                'orden' => $validated['orden'] ?? 0,
+                'campo_id' => $validated['campo_id'],
+                'visible_combo' => $validated['visible_combo'] ?? true,
+                'estado' => $validated['estado'] ?? true
+            ]);
             $categoria->load('campo');
             
             Log::info('[CategoriaController] store: categoría creada', [
@@ -188,6 +213,7 @@ class CategoriaController extends Controller
                 'nombre' => 'nullable|string|max:255',
                 'tipo' => 'nullable|in:Ingreso,Egreso',
                 'visible_sum' => 'nullable|boolean',
+                'visible_combo' => 'nullable|boolean',
                 'orden' => 'nullable|integer',
                 'campo_id' => 'nullable|exists:campos,id',
                 'estado' => 'nullable|boolean'
@@ -216,7 +242,22 @@ class CategoriaController extends Controller
                 }
             }
 
-            $categoria->update($validated);
+            $updateData = [
+                'nombre' => $validated['nombre'] ?? null,
+                'tipo' => $validated['tipo'] ?? null,
+                'visible_sum' => $validated['visible_sum'] ?? null,
+                'orden' => $validated['orden'] ?? null,
+                'campo_id' => $validated['campo_id'] ?? null,
+                'visible_combo' => $validated['visible_combo'] ?? null,
+                'estado' => $validated['estado'] ?? null
+            ];
+            
+            // Remove null values from update data
+            $updateData = array_filter($updateData, function($value) {
+                return $value !== null;
+            });
+            
+            $categoria->update($updateData);
             $categoria->load('campo');
             
             Log::info('[CategoriaController] update: éxito', ['categoria_id' => $categoria->id]);
