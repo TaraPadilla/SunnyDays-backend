@@ -13,12 +13,16 @@ class Balance extends Model
     protected $fillable = [
         'inmueble_id',
         'fecha_corte',
+        'fecha_desde',
+        'fecha_hasta',
         'json_reservas',
         'json_gastos',
     ];
 
     protected $casts = [
         'fecha_corte' => 'date',
+        'fecha_desde' => 'date',
+        'fecha_hasta' => 'date',
         'json_reservas' => 'array',
         'json_gastos' => 'array',
     ];
