@@ -9,6 +9,7 @@ use App\Http\Controllers\CategoriaController;
 use App\Http\Controllers\SubcategoriaController;
 use App\Http\Controllers\GastoController;
 use App\Http\Controllers\SoporteGastoController;
+use App\Http\Controllers\BalanceController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\AuthController;
 
@@ -66,6 +67,11 @@ Route::middleware('auth:sanctum')->group(function () {
     // Soportes de Gastos
     Route::apiResource('soporte-gastos', SoporteGastoController::class);
     Route::post('/soporte-gastos/{id}/restore', [SoporteGastoController::class, 'restore']);
+
+    // Balances
+    Route::apiResource('balances', BalanceController::class);
+    Route::post('/balances/{id}/restore', [BalanceController::class, 'restore']);
+
     Route::post('/soporte-gastos/upload', [SoporteGastoController::class, 'uploadFile']);
 
 });
