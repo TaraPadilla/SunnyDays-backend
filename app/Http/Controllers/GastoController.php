@@ -221,6 +221,14 @@ class GastoController extends Controller
 
             // Agrupar gastos por categoría
             $gastosPorCategoria = $gastos->groupBy(function ($gasto) {
+                // Validar que la categoría no sea null para evitar error
+                if ($gasto->categoria === null) {
+                    Log::warning('[GastoController] generarBalance: gasto sin categoría', [
+                        'gasto_id' => $gasto->id,
+                        'gasto_descripcion' => $gasto->descripcion
+                    ]);
+                    return 'sin_categoria'; // Agrupar gastos sin categoría
+                }
                 return $gasto->categoria->id;
             });
 
