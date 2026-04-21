@@ -34,12 +34,14 @@ class BalanceRequest extends FormRequest
             ],
             'json_reservas.total' => 'required|numeric|min:0',
             'json_gastos' => 'required|array',
-            'json_gastos.gastos' => 'required|array|min:1',
-            'json_gastos.gastos.*' => 'array',
-            'json_gastos.gastos.*.categoria' => 'required|string',
-            'json_gastos.gastos.*.subcategoria' => 'required|string',
-            'json_gastos.gastos.*.monto' => 'required|numeric|min:0',
-            'json_gastos.gastos.*.descripcion' => 'required|string',
+            'json_gastos.categorias' => 'required|array|min:1',
+            'json_gastos.categorias.*' => 'array',
+            'json_gastos.categorias.*.categoria' => 'required|string',
+            'json_gastos.categorias.*.subcategorias' => 'required|array|min:1',
+            'json_gastos.categorias.*.subcategorias.*' => 'array',
+            'json_gastos.categorias.*.subcategorias.*.subcategoria' => 'required|string',
+            'json_gastos.categorias.*.subcategorias.*.monto' => 'required|numeric|min:0',
+            'json_gastos.categorias.*.subtotal' => 'sometimes|numeric|min:0',
             'json_gastos.total' => 'required|numeric|min:0',
         ];
 
@@ -58,12 +60,14 @@ class BalanceRequest extends FormRequest
             ];
             $rules['json_reservas.total'] = 'sometimes|numeric|min:0';
             $rules['json_gastos'] = 'sometimes|array';
-            $rules['json_gastos.gastos'] = 'sometimes|array|min:1';
-            $rules['json_gastos.gastos.*'] = 'sometimes|array';
-            $rules['json_gastos.gastos.*.categoria'] = 'sometimes|string';
-            $rules['json_gastos.gastos.*.subcategoria'] = 'sometimes|string';
-            $rules['json_gastos.gastos.*.monto'] = 'sometimes|numeric|min:0';
-            $rules['json_gastos.gastos.*.descripcion'] = 'sometimes|string';
+            $rules['json_gastos.categorias'] = 'sometimes|array|min:1';
+            $rules['json_gastos.categorias.*'] = 'sometimes|array';
+            $rules['json_gastos.categorias.*.categoria'] = 'sometimes|string';
+            $rules['json_gastos.categorias.*.subcategorias'] = 'sometimes|array|min:1';
+            $rules['json_gastos.categorias.*.subcategorias.*'] = 'sometimes|array';
+            $rules['json_gastos.categorias.*.subcategorias.*.subcategoria'] = 'sometimes|string';
+            $rules['json_gastos.categorias.*.subcategorias.*.monto'] = 'sometimes|numeric|min:0';
+            $rules['json_gastos.categorias.*.subtotal'] = 'sometimes|numeric|min:0';
             $rules['json_gastos.total'] = 'sometimes|numeric|min:0';
         }
 
@@ -107,15 +111,20 @@ class BalanceRequest extends FormRequest
             'json_gastos.array' => 'Campo json_gastos debe ser un objeto.',
             'json_gastos.sometimes' => 'Campo json_gastos opcional.',
             
-            'json_gastos.gastos.required' => 'Campo json_gastos.gastos requerido.',
-            'json_gastos.gastos.array' => 'Campo json_gastos.gastos debe ser un arreglo.',
-            'json_gastos.gastos.min' => 'Campo json_gastos.gastos requiere al menos un elemento.',
+            'json_gastos.categorias.required' => 'Campo json_gastos.categorias requerido.',
+            'json_gastos.categorias.array' => 'Campo json_gastos.categorias debe ser un arreglo.',
+            'json_gastos.categorias.min' => 'Campo json_gastos.categorias requiere al menos un elemento.',
             
-            'json_gastos.gastos.*.categoria.required' => 'Campo categoria requerido en gastos.',
-            'json_gastos.gastos.*.subcategoria.required' => 'Campo subcategoria requerido en gastos.',
-            'json_gastos.gastos.*.monto.required' => 'Campo monto requerido en gastos.',
-            'json_gastos.gastos.*.monto.numeric' => 'Campo monto debe ser un número.',
-            'json_gastos.gastos.*.descripcion.required' => 'Campo descripcion requerido en gastos.',
+            'json_gastos.categorias.*.categoria.required' => 'Campo categoria requerido en categorías.',
+            'json_gastos.categorias.*.subcategorias.required' => 'Campo subcategorias requerido en categorías.',
+            'json_gastos.categorias.*.subcategorias.array' => 'Campo subcategorias debe ser un arreglo.',
+            'json_gastos.categorias.*.subcategorias.min' => 'Campo subcategorias requiere al menos un elemento.',
+            
+            'json_gastos.categorias.*.subcategorias.*.subcategoria.required' => 'Campo subcategoria requerido en subcategorías.',
+            'json_gastos.categorias.*.subcategorias.*.monto.required' => 'Campo monto requerido en subcategorías.',
+            'json_gastos.categorias.*.subcategorias.*.monto.numeric' => 'Campo monto debe ser un número.',
+            
+            'json_gastos.categorias.*.subtotal.numeric' => 'Campo subtotal debe ser un número.',
             
             'json_gastos.total.required' => 'Campo json_gastos.total requerido.',
             'json_gastos.total.numeric' => 'Campo json_gastos.total debe ser un número.',
