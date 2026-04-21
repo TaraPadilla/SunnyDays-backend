@@ -148,10 +148,10 @@ class GastoController extends Controller
 
             Log::debug('[GastoController] generarBalance: calculando balances');
 
-            // Construir el objeto Balance
+            // Construir el objeto Balance ordenado
             $balance = [];
 
-            // Obtener todas las categorías para incluir las compuestas sin gastos directos
+            // Obtener todas las categorías ordenadas para incluir las compuestas sin gastos directos
             $todasLasCategorias = \App\Models\Categoria::with(['campo', 'subcategorias.campo'])
                 ->orderBy('orden', 'asc')
                 ->get();
@@ -187,11 +187,12 @@ class GastoController extends Controller
                             'id' => $subcategoria->id,
                             'nombre' => $subcategoria->nombre,
                             'valor' => $subcategoria->subtotal(),
+                            'orden' => $subcategoria->orden,
                             'tipo_calculo' => $campo ? $campo->tipo_calculo : null
                         ];
                     }
                 } else {
-                    // Si no tiene gastos directos pero es compuesta, incluir sus subcategorías
+                    // Si no tiene gastos directos pero es compuesta, incluir sus subcategorías ordenadas
                     if ($categoria->campo && $categoria->campo->tipo_calculo === 'COMPUESTA') {
                         $subcategoriasOrdenadas = $categoria->subcategorias->sortBy('orden');
                         foreach ($subcategoriasOrdenadas as $subcategoria) {
@@ -199,6 +200,7 @@ class GastoController extends Controller
                                 'id' => $subcategoria->id,
                                 'nombre' => $subcategoria->nombre,
                                 'valor' => $subcategoria->subtotal(),
+                                'orden' => $subcategoria->orden,
                                 'tipo_calculo' => $subcategoria->campo ? $subcategoria->campo->tipo_calculo : null
                             ];
                         }
