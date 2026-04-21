@@ -43,6 +43,18 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Disable Authentication (Testing Only)
+    |--------------------------------------------------------------------------
+    |
+    | Set this to true to disable authentication temporarily for testing.
+    | REMEMBER TO SET IT BACK TO FALSE IN PRODUCTION!
+    |
+    */
+
+    'disable_auth' => env('DISABLE_AUTH', false),
+
+    /*
+    |--------------------------------------------------------------------------
     | Application URL
     |--------------------------------------------------------------------------
     |

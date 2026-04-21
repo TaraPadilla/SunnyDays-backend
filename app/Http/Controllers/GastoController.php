@@ -121,7 +121,14 @@ class GastoController extends Controller
         Log::info('[GastoController] generarBalance: petición recibida', [
             'method' => $request->method(),
             'path' => $request->path(),
-            'filters' => $request->all(['fecha_desde', 'fecha_hasta', 'inmueble_id'])
+            'all_params' => $request->all(),
+            'query_params' => $request->query(),
+            'fecha_desde' => $request->input('fecha_desde'),
+            'fecha_hasta' => $request->input('fecha_hasta'),
+            'inmueble_id' => $request->input('inmueble_id'),
+            'filled_fecha_desde' => $request->filled('fecha_desde'),
+            'filled_fecha_hasta' => $request->filled('fecha_hasta'),
+            'filled_inmueble_id' => $request->filled('inmueble_id')
         ]);
 
         try {
@@ -130,13 +137,17 @@ class GastoController extends Controller
 
             // Aplicar filtros si existen
             if ($request->filled('fecha_desde')) {
-                $query->whereDate('fecha', '>=', $request->fecha_desde);
-                Log::debug('[GastoController] generarBalance: aplicando filtro fecha_desde', ['fecha_desde' => $request->fecha_desde]);
+                $fechaDesde = $request->input('fecha_desde');
+                Log::info('[GastoController] generarBalance: fecha_desde recibida', ['fecha_desde' => $fechaDesde, 'tipo' => gettype($fechaDesde)]);
+                $query->whereDate('fecha', '>=', $fechaDesde);
+                Log::debug('[GastoController] generarBalance: aplicando filtro fecha_desde', ['fecha_desde' => $fechaDesde]);
             }
 
             if ($request->filled('fecha_hasta')) {
-                $query->whereDate('fecha', '<=', $request->fecha_hasta);
-                Log::debug('[GastoController] generarBalance: aplicando filtro fecha_hasta', ['fecha_hasta' => $request->fecha_hasta]);
+                $fechaHasta = $request->input('fecha_hasta');
+                Log::info('[GastoController] generarBalance: fecha_hasta recibida', ['fecha_hasta' => $fechaHasta, 'tipo' => gettype($fechaHasta)]);
+                $query->whereDate('fecha', '<=', $fechaHasta);
+                Log::debug('[GastoController] generarBalance: aplicando filtro fecha_hasta', ['fecha_hasta' => $fechaHasta]);
             }
 
             if ($request->filled('inmueble_id')) {
@@ -144,9 +155,61 @@ class GastoController extends Controller
                 Log::debug('[GastoController] generarBalance: aplicando filtro inmueble_id', ['inmueble_id' => $request->inmueble_id]);
             }
 
+            // Log de la consulta SQL antes de ejecutarla
+            Log::info('[GastoController] generarBalance: SQL query', [
+                'sql' => $query->toSql(),
+                'bindings' => $query->getBindings()
+            ]);
+
             $gastos = $query->orderBy('id', 'desc')->get();
 
-            Log::debug('[GastoController] generarBalance: calculando balances');
+            Log::info('[GastoController] generarBalance: resultados de la consulta', [
+                'total_gastos_en_query' => $gastos->count(),
+                'gastos_ids' => $gastos->pluck('id')->toArray(),
+                'primer_gasto_fecha' => $gastos->first()?->fecha,
+                'ultimo_gasto_fecha' => $gastos->last()?->fecha,
+                'primer_gasto_id' => $gastos->first()?->id,
+                'query_sql' => $query->toSql(),
+                'query_bindings' => $query->getBindings()
+            ]);
+
+            // Si no hay gastos, verificar qué fechas existen en la BD
+            if ($gastos->isEmpty()) {
+                Log::info('[GastoController] generarBalance: no se encontraron gastos para los filtros especificados');
+                
+                // Consulta de depuración para ver qué fechas existen
+                $fechasExistentes = \App\Models\Gasto::selectRaw('MIN(fecha) as fecha_min, MAX(fecha) as fecha_max, COUNT(*) as total_gastos')
+                    ->whereNull('deleted_at')
+                    ->first();
+                
+                $ultimosGastos = \App\Models\Gasto::select('id', 'fecha', 'monto_total')
+                    ->whereNull('deleted_at')
+                    ->orderBy('fecha', 'desc')
+                    ->limit(5)
+                    ->get();
+                
+                Log::info('[GastoController] generarBalance: depuración de fechas', [
+                    'fecha_min' => $fechasExistentes->fecha_min,
+                    'fecha_max' => $fechasExistentes->fecha_max,
+                    'total_gastos_bd' => $fechasExistentes->total_gastos,
+                    'ultimos_gastos' => $ultimosGastos->toArray()
+                ]);
+                
+                return response()->json([
+                    'status' => 'success',
+                    'message' => 'No se encontraron gastos para los filtros especificados',
+                    'data' => [],
+                    'balance' => [],
+                    'debug' => [
+                        'fecha_min_bd' => $fechasExistentes->fecha_min,
+                        'fecha_max_bd' => $fechasExistentes->fecha_max,
+                        'total_gastos_bd' => $fechasExistentes->total_gastos,
+                        'ultimos_gastos' => $ultimosGastos
+                    ]
+                ], 200);
+            }
+
+            Log::debug('[GastoController] generarBalance: calculando balances con ' . $gastos->count() . ' gastos');
 
             // Construir el objeto Balance ordenado
             $balance = [];
@@ -229,13 +292,22 @@ class GastoController extends Controller
                 }
             }
 
+            // Verificar los datos que se van a retornar
+            $dataToReturn = GastoResource::collection($gastos);
+            Log::info('[GastoController] generarBalance: datos a retornar', [
+                'categorias_en_balance' => count($balance),
+                'gastos_en_data_count' => $dataToReturn->count(),
+                'gastos_originales_count' => $gastos->count(),
+                'data_es_collection' => is_a($dataToReturn, \Illuminate\Http\Resources\Json\AnonymousResourceCollection::class),
+                'gastos_array_count' => count($dataToReturn->toArray(request()))
+            ]);
+
             Log::info('[GastoController] generarBalance: éxito', ['categorias' => count($balance)]);
 
             return response()->json([
                 'status' => 'success',
                 'message' => 'Balance generado correctamente',
-                'data' => GastoResource::collection($gastos),
-                'balance' => $balance
+                'data' => $balance
             ], 200);
         } catch (\Exception $e) {
             Log::error('[GastoController] generarBalance: excepción', [

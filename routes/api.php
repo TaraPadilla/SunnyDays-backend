@@ -33,7 +33,7 @@ Route::get('/check-n8n-availability', [ReceiptController::class, 'checkN8nAvaila
 |--------------------------------------------------------------------------
 */
 
-Route::middleware('auth:sanctum')->group(function () {
+Route::middleware('optional.auth')->group(function () {
 
     // Usuario autenticado
     Route::get('/me', [AuthController::class, 'me']);
