@@ -40,6 +40,27 @@ class Categoria extends Model
     }
 
     /**
+     * Boot del modelo para agregar eventos
+     */
+    protected static function boot()
+    {
+        parent::boot();
+
+        // Eliminar en cascada cuando se borra una categoría
+        static::deleting(function ($categoria) {
+            // Primero eliminar todos los gastos asociados a las subcategorías de esta categoría
+            $subcategorias = $categoria->subcategorias;
+            foreach ($subcategorias as $subcategoria) {
+                // Eliminar gastos de esta subcategoría
+                $subcategoria->gastos()->delete();
+            }
+            
+            // Luego eliminar todas las subcategorías de esta categoría
+            $categoria->subcategorias()->delete();
+        });
+    }
+
+    /**
      * Relación con Campo
      */
     public function campo(): BelongsTo
