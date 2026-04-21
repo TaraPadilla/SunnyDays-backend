@@ -16,7 +16,7 @@ class GastoResource extends JsonResource
     {
         return [
             'id' => $this->id,
-            'fecha' => $this->fecha,
+            'fecha' => $this->fecha ? $this->fecha->format('Y-m-d') : null,
             'monto_sin_iva' => $this->monto_sin_iva,
             'iva' => $this->iva,
             'monto_total' => $this->monto_total,
