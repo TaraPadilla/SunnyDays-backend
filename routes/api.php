@@ -12,6 +12,7 @@ use App\Http\Controllers\SoporteGastoController;
 use App\Http\Controllers\BalanceController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\DashboardController;
 
 /*
 |--------------------------------------------------------------------------
@@ -38,6 +39,9 @@ Route::middleware('optional.auth')->group(function () {
     // Usuario autenticado
     Route::get('/me', [AuthController::class, 'me']);
     Route::post('/logout', [AuthController::class, 'logout']);
+
+    // Dashboard
+    Route::get('/dashboard', [DashboardController::class, 'index']);
 
     // Usuarios
     Route::apiResource('users', UserController::class);
