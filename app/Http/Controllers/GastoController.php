@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Gasto;
 use App\Http\Resources\GastoResource;
+use App\Services\FormulaCalculatorService;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Log;
@@ -164,6 +165,9 @@ class GastoController extends Controller
                 ];
                 
                 Log::info('[ContextoReservas]', $contexto);
+                
+                // Asignar el contexto al servicio de cálculo de fórmulas
+                FormulaCalculatorService::setContext($contexto);
             }
             
             Log::debug('[GastoController] generarBalance: construyendo consulta con filtros');
@@ -346,17 +350,25 @@ class GastoController extends Controller
 
             Log::info('[GastoController] generarBalance: éxito', ['categorias' => count($balance)]);
 
-            return response()->json([
+            $response = response()->json([
                 'status' => 'success',
                 'message' => 'Balance generado correctamente',
                 'data' => $balance
             ], 200);
+            
+            // Limpiar el contexto después de usarlo
+            FormulaCalculatorService::setContext([]);
+            
+            return $response;
         } catch (\Exception $e) {
             Log::error('[GastoController] generarBalance: excepción', [
                 'message' => $e->getMessage(),
                 'file' => $e->getFile(),
                 'line' => $e->getLine(),
             ]);
+
+            // Limpiar el contexto incluso en caso de error
+            FormulaCalculatorService::setContext([]);
 
             return response()->json([
                 'status' => 'error',

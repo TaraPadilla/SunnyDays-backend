@@ -15,6 +15,19 @@ class FormulaCalculatorService
     private static $calculationCache = [];
 
     /**
+     * Contexto externo para valores MANUAL
+     */
+    private static $context = [];
+
+    /**
+     * Asigna el contexto externo para valores MANUAL
+     */
+    public static function setContext(array $context): void
+    {
+        self::$context = $context;
+    }
+
+    /**
      * Calcula el subtotal de una categoría o subcategoría
      * Este es el método principal que se llama desde el balance
      */
@@ -67,6 +80,8 @@ class FormulaCalculatorService
                 return self::calculateSum($parentContext);
             case 'COMPUESTA':
                 return self::processFormula($campo, $parentContext);
+            case 'MANUAL':
+                return self::getContextValue($campo->clave);
             default:
                 return 0;
         }
@@ -309,11 +324,28 @@ class FormulaCalculatorService
             'clave' => $clave
         ]);
         
-        $campo = Campo::where('clave', $clave)->first();
+        // Búsqueda case-insensitive de la clave
+        $campo = Campo::whereRaw('LOWER(clave) = ?', [strtolower($clave)])->first();
         
         if (!$campo) {
             Log::warning('[FormulaCalculatorService] Campo no encontrado', ['clave' => $clave]);
             return 0;
+        }
+        
+        // Si el campo es de tipo MANUAL, obtener su valor del contexto externo
+        if ($campo->tipo_calculo === 'MANUAL') {
+            $claveNormalizada = strtolower($campo->clave);
+            $valor = isset(self::$context[$claveNormalizada]) 
+                ? (float) self::$context[$claveNormalizada] 
+                : 0;
+            
+            Log::debug('[FormulaCalculatorService] Campo MANUAL encontrado', [
+                'clave' => $clave,
+                'campo_id' => $campo->id,
+                'valor_contexto' => $valor
+            ]);
+            
+            return $valor;
         }
         
         // Buscar la categoría o subcategoría asociada a este campo
@@ -356,5 +388,13 @@ class FormulaCalculatorService
     public static function clearCache(): void
     {
         self::$calculationCache = [];
+    }
+
+    /**
+     * Obtiene un valor del contexto externo
+     */
+    private static function getContextValue(string $clave): float
+    {
+        return isset(self::$context[$clave]) ? (float) self::$context[$clave] : 0;
     }
 }
