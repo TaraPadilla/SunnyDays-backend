@@ -41,6 +41,14 @@ class Subcategoria extends Model
         static::deleting(function ($subcategoria) {
             // Eliminar todos los gastos asociados a esta subcategoría
             $subcategoria->gastos()->delete();
+            
+            // Eliminar el campo asociado a esta subcategoría si no está siendo usado por otras subcategorías
+            if ($subcategoria->campo_id) {
+                $campo = $subcategoria->campo;
+                if ($campo && $campo->subcategorias()->count() <= 1) {
+                    $campo->delete();
+                }
+            }
         });
     }
 

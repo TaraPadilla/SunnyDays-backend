@@ -53,10 +53,26 @@ class Categoria extends Model
             foreach ($subcategorias as $subcategoria) {
                 // Eliminar gastos de esta subcategoría
                 $subcategoria->gastos()->delete();
+                
+                // Eliminar el campo asociado a esta subcategoría si no está siendo usado por otras subcategorías
+                if ($subcategoria->campo_id) {
+                    $campo = $subcategoria->campo;
+                    if ($campo && $campo->subcategorias()->count() <= 1) {
+                        $campo->delete();
+                    }
+                }
             }
             
-            // Luego eliminar todas las subcategorías de esta categoría
+            // Eliminar todas las subcategorías de esta categoría
             $categoria->subcategorias()->delete();
+            
+            // Eliminar el campo asociado a esta categoría si no está siendo usado por otras categorías
+            if ($categoria->campo_id) {
+                $campo = $categoria->campo;
+                if ($campo && $campo->categorias()->count() <= 1) {
+                    $campo->delete();
+                }
+            }
         });
     }
 
