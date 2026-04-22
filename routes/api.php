@@ -34,7 +34,7 @@ Route::get('/check-n8n-availability', [ReceiptController::class, 'checkN8nAvaila
 |--------------------------------------------------------------------------
 */
 
-Route::middleware('optional.auth')->group(function () {
+Route::middleware('auth:sanctum')->group(function () {
 
     // Usuario autenticado
     Route::get('/me', [AuthController::class, 'me']);
@@ -55,6 +55,7 @@ Route::middleware('optional.auth')->group(function () {
     Route::post('/campos/{id}/restore', [CampoController::class, 'restore']);
 
     // Categorías
+    Route::get('/categorias/reservas', [CategoriaController::class, 'getReservasCategory']);
     Route::apiResource('categorias', CategoriaController::class);
     Route::post('/categorias/{id}/restore', [CategoriaController::class, 'restore']);
 
@@ -66,6 +67,7 @@ Route::middleware('optional.auth')->group(function () {
     Route::apiResource('gastos', GastoController::class);
     Route::get('/gastos-filtrados', [GastoController::class, 'gastosFiltrados']);
     Route::get('/generar-balance', [GastoController::class, 'generarBalance']);
+    Route::post('/generar-balance', [GastoController::class, 'generarBalance']);
     Route::post('/gastos/{id}/restore', [GastoController::class, 'restore']);
 
     // Soportes de Gastos

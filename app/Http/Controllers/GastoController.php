@@ -132,6 +132,40 @@ class GastoController extends Controller
         ]);
 
         try {
+            // Construir contexto de reservas si viene en el request
+            $contexto = [];
+            if ($request->filled('json_reservas')) {
+                $jsonReservas = $request->input('json_reservas');
+                
+                Log::info('[GastoController] generarBalance: json_reservas recibido', [
+                    'json_reservas' => $jsonReservas
+                ]);
+                
+                // Tomar directamente el total como reservas_subtotal
+                $reservasSubtotal = isset($jsonReservas['total']) ? (float) $jsonReservas['total'] : 0.0;
+                
+                // Inicializar contadores
+                $reservasNoches = 0.0;
+                $reservasSeguro = 0.0;
+                
+                // Recorrer el array de reservas para calcular noches y seguro
+                if (isset($jsonReservas['reservas']) && is_array($jsonReservas['reservas'])) {
+                    foreach ($jsonReservas['reservas'] as $reserva) {
+                        $reservasNoches += isset($reserva['noches']) ? (float) $reserva['noches'] : 0.0;
+                        $reservasSeguro += isset($reserva['seguro']) ? (float) $reserva['seguro'] : 0.0;
+                    }
+                }
+                
+                // Crear el contexto
+                $contexto = [
+                    'reservas_subtotal' => $reservasSubtotal,
+                    'reservas_noches' => $reservasNoches,
+                    'reservas_seguro' => $reservasSeguro
+                ];
+                
+                Log::info('[ContextoReservas]', $contexto);
+            }
+            
             Log::debug('[GastoController] generarBalance: construyendo consulta con filtros');
             $query = Gasto::with(['inmueble', 'categoria.campo', 'subcategoria.campo']);
 

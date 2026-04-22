@@ -26,7 +26,7 @@ class Subcategoria extends Model
     ];
 
     /**
-     * Boot del modelo para agregar validaciones
+     * Boot del modelo para agregar validaciones y eventos
      */
     protected static function boot()
     {
@@ -35,6 +35,12 @@ class Subcategoria extends Model
         // Validar antes de guardar
         static::saving(function ($subcategoria) {
             $subcategoria->validateCategoriaAssociation();
+        });
+
+        // Eliminar en cascada cuando se borra una subcategoría
+        static::deleting(function ($subcategoria) {
+            // Eliminar todos los gastos asociados a esta subcategoría
+            $subcategoria->gastos()->delete();
         });
     }
 

@@ -19,7 +19,8 @@ class CategoriaController extends Controller
         Log::info('[CategoriaController] index: petición recibida');
         
         try {
-            $user = auth()->user();
+            // Usar el guard de Sanctum para autenticación
+            $user = auth('sanctum')->user();
             $isAdmin = $user && $user->perfil === 'admin';
             
             $query = Categoria::where('estado', true)->with(['campo', 'subcategorias' => function($query) {
@@ -368,6 +369,62 @@ class CategoriaController extends Controller
             return response()->json([
                 'status' => 'error',
                 'message' => 'Error al restaurar categoría',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Obtener la categoría Reservas con sus subcategorías para balances
+     */
+    public function getReservasCategory(): JsonResponse
+    {
+        Log::info('[CategoriaController] getReservasCategory: petición recibida');
+        
+        try {
+            // Buscar categoría "Reservas" de tipo Ingreso sin importar el rol del usuario
+            $categoria = Categoria::where('nombre', 'Reservas')
+                ->where('tipo', 'Ingreso')
+                ->where('estado', true)
+                ->with(['campo', 'subcategorias' => function($query) {
+                    $query->where('estado', true)->orderBy('orden');
+                }])
+                ->first();
+
+
+            Log::info('[CategoriaController] getReservasCategory: categoría encontrada', [
+                'categoria' => $categoria
+            ]);
+            
+            if (!$categoria) {
+                Log::warning('[CategoriaController] getReservasCategory: categoría no encontrada');
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'No se encontró la categoría "Reservas" de tipo Ingreso'
+                ], 404);
+            }
+
+            Log::info('[CategoriaController] getReservasCategory: éxito', [
+                'categoria_id' => $categoria->id,
+                'subcategorias_count' => $categoria->subcategorias->count()
+            ]);
+            
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Categoría Reservas obtenida correctamente',
+                'data' => new CategoriaResource($categoria)
+            ], 200);
+            
+        } catch (\Exception $e) {
+            Log::error('[CategoriaController] getReservasCategory: excepción', [
+                'message' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine()
+            ]);
+            
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Error al obtener categoría Reservas',
                 'error' => $e->getMessage()
             ], 500);
         }
