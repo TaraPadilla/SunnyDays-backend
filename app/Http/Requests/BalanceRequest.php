@@ -4,6 +4,7 @@ namespace App\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
 use App\Rules\JsonReservasStructure;
+use Illuminate\Support\Facades\Log;
 
 class BalanceRequest extends FormRequest
 {
@@ -20,29 +21,21 @@ class BalanceRequest extends FormRequest
      */
     public function rules(): array
     {
+        Log::info('[BalanceRequest] rules: iniciando validación', [
+            'method' => $this->method(),
+            'all_data' => $this->all(),
+            'json_reservas' => $this->input('json_reservas'),
+            'json_reservas_reservas' => $this->input('json_reservas.reservas'),
+            'json_reservas_reservas_count' => is_array($this->input('json_reservas.reservas')) ? count($this->input('json_reservas.reservas')) : 'not_array'
+        ]);
+        
         $rules = [
             'inmueble_id' => 'required|exists:inmuebles,id',
             'fecha_corte' => 'required|date',
             'fecha_desde' => 'required|date',
             'fecha_hasta' => 'required|date',
             'json_reservas' => 'required|array',
-            'json_reservas.reservas' => [
-                'required',
-                'array',
-                'min:1',
-                new JsonReservasStructure()
-            ],
-            'json_reservas.total' => 'required|numeric|min:0',
             'json_gastos' => 'required|array',
-            'json_gastos.categorias' => 'required|array|min:1',
-            'json_gastos.categorias.*' => 'array',
-            'json_gastos.categorias.*.categoria' => 'required|string',
-            'json_gastos.categorias.*.subcategorias' => 'required|array|min:1',
-            'json_gastos.categorias.*.subcategorias.*' => 'array',
-            'json_gastos.categorias.*.subcategorias.*.subcategoria' => 'required|string',
-            'json_gastos.categorias.*.subcategorias.*.monto' => 'required|numeric|min:0',
-            'json_gastos.categorias.*.subtotal' => 'sometimes|numeric|min:0',
-            'json_gastos.total' => 'required|numeric|min:0',
         ];
 
         // Para actualización, hacer los campos opcionales
@@ -52,26 +45,24 @@ class BalanceRequest extends FormRequest
             $rules['fecha_desde'] = 'sometimes|date';
             $rules['fecha_hasta'] = 'sometimes|date';
             $rules['json_reservas'] = 'sometimes|array';
-            $rules['json_reservas.reservas'] = [
-                'sometimes',
-                'array',
-                'min:1',
-                new JsonReservasStructure()
-            ];
-            $rules['json_reservas.total'] = 'sometimes|numeric|min:0';
             $rules['json_gastos'] = 'sometimes|array';
-            $rules['json_gastos.categorias'] = 'sometimes|array|min:1';
-            $rules['json_gastos.categorias.*'] = 'sometimes|array';
-            $rules['json_gastos.categorias.*.categoria'] = 'sometimes|string';
-            $rules['json_gastos.categorias.*.subcategorias'] = 'sometimes|array|min:1';
-            $rules['json_gastos.categorias.*.subcategorias.*'] = 'sometimes|array';
-            $rules['json_gastos.categorias.*.subcategorias.*.subcategoria'] = 'sometimes|string';
-            $rules['json_gastos.categorias.*.subcategorias.*.monto'] = 'sometimes|numeric|min:0';
-            $rules['json_gastos.categorias.*.subtotal'] = 'sometimes|numeric|min:0';
-            $rules['json_gastos.total'] = 'sometimes|numeric|min:0';
         }
 
+        Log::info('[BalanceRequest] rules: reglas definidas', ['rules' => $rules]);
         return $rules;
+    }
+
+    /**
+     * Handle a failed validation attempt.
+     */
+    protected function failedValidation(\Illuminate\Contracts\Validation\Validator $validator)
+    {
+        Log::error('[BalanceRequest] failedValidation: validación fallida', [
+            'errors' => $validator->errors()->toArray(),
+            'failed_rules' => $validator->failed()
+        ]);
+        
+        parent::failedValidation($validator);
     }
 
     /**
@@ -102,7 +93,7 @@ class BalanceRequest extends FormRequest
             
             'json_reservas.reservas.required' => 'Campo json_reservas.reservas requerido.',
             'json_reservas.reservas.array' => 'Campo json_reservas.reservas debe ser un arreglo.',
-            'json_reservas.reservas.min' => 'Campo json_reservas.reservas requiere al menos un elemento.',
+            'json_reservas.reservas.min' => 'Campo json_reservas.reservas puede estar vacío.',
             
             'json_reservas.total.required' => 'Campo json_reservas.total requerido.',
             'json_reservas.total.numeric' => 'Campo json_reservas.total debe ser un número.',

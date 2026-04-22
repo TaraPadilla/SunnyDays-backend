@@ -4,6 +4,7 @@ namespace App\Rules;
 
 use Closure;
 use Illuminate\Contracts\Validation\ValidationRule;
+use Illuminate\Support\Facades\Log;
 
 class JsonReservasStructure implements ValidationRule
 {
@@ -12,16 +13,26 @@ class JsonReservasStructure implements ValidationRule
      */
     public function validate(string $attribute, mixed $value, Closure $fail): void
     {
+        Log::info('[JsonReservasStructure] validate: iniciando', [
+            'attribute' => $attribute,
+            'value' => $value,
+            'value_type' => gettype($value),
+            'is_array' => is_array($value),
+            'is_empty' => empty($value),
+            'count' => is_array($value) ? count($value) : 'not_array'
+        ]);
+
         // Verificar que sea un arreglo
         if (!is_array($value)) {
+            Log::error('[JsonReservasStructure] validate: no es array', ['value' => $value]);
             $fail('El campo debe ser un arreglo de objetos.');
             return;
         }
 
-        // Verificar que no esté vacío
+        // Permitir arrays vacíos (para balances sin reservas)
         if (empty($value)) {
-            $fail('El campo no puede estar vacío.');
-            return;
+            Log::info('[JsonReservasStructure] validate: array vacío, permitiendo continuar');
+            return; // Permitir arrays vacíos
         }
 
         foreach ($value as $index => $row) {
