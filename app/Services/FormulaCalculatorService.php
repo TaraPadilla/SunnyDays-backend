@@ -255,7 +255,17 @@ class FormulaCalculatorService
                 if ($token === '*') {
                     $result[count($result) - 1] = $leftValue * $rightValue;
                 } else {
-                    $result[count($result) - 1] = $leftValue / $rightValue;
+                    // Evitar división por cero
+                    if ($rightValue == 0) {
+                        \Log::debug('Division by zero detected in FormulaCalculatorService', [
+                            'leftValue' => $leftValue,
+                            'rightValue' => $rightValue,
+                            'operation' => 'division'
+                        ]);
+                        $result[count($result) - 1] = 0;
+                    } else {
+                        $result[count($result) - 1] = $leftValue / $rightValue;
+                    }
                 }
                 
                 $i += 2;
