@@ -42,7 +42,7 @@ class BalanceController extends Controller
                 Log::debug('[BalanceController] index: aplicando filtro fecha_corte_to', ['fecha_corte_to' => $request->fecha_corte_to]);
             }
 
-            $balances = $query->orderBy('fecha_corte', 'desc')->get();
+            $balances = $query->orderBy('id', 'desc')->get();
 
             Log::info('[BalanceController] index: éxito', ['total' => $balances->count()]);
 
