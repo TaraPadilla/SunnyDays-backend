@@ -29,6 +29,7 @@ class BalanceResource extends JsonResource
             'fecha_hasta' => $this->fecha_hasta ? $this->fecha_hasta->format('Y-m-d') : null,
             'json_reservas' => $this->json_reservas,
             'json_gastos' => $this->json_gastos,
+            'observaciones' => $this->observaciones,
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,
         ];

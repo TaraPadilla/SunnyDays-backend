@@ -36,6 +36,7 @@ class BalanceRequest extends FormRequest
             'fecha_hasta' => 'required|date',
             'json_reservas' => 'required|array',
             'json_gastos' => 'required|array',
+            'observaciones' => 'nullable|string|max:1000',
         ];
 
         // Para actualización, hacer los campos opcionales
@@ -46,6 +47,7 @@ class BalanceRequest extends FormRequest
             $rules['fecha_hasta'] = 'sometimes|date';
             $rules['json_reservas'] = 'sometimes|array';
             $rules['json_gastos'] = 'sometimes|array';
+            $rules['observaciones'] = 'sometimes|nullable|string|max:1000';
         }
 
         Log::info('[BalanceRequest] rules: reglas definidas', ['rules' => $rules]);

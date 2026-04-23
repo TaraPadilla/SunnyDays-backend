@@ -17,6 +17,7 @@ class Balance extends Model
         'fecha_hasta',
         'json_reservas',
         'json_gastos',
+        'observaciones',
     ];
 
     protected $casts = [
