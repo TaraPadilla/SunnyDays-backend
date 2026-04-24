@@ -277,6 +277,7 @@ class GastoController extends Controller
                     'nombre' => $categoria->nombre,
                     'tipo' => $categoria->tipo,
                     'orden' => $categoria->orden,
+                    'tipo_resultado' => $categoria->campo ? $categoria->campo->tipo_resultado : null,
                     'subcategorias' => []
                 ];
 
@@ -300,7 +301,8 @@ class GastoController extends Controller
                             'nombre' => $subcategoria->nombre,
                             'valor' => $subtotalValue,
                             'orden' => $subcategoria->orden,
-                            'tipo_calculo' => $campo ? $campo->tipo_calculo : null
+                            'tipo_calculo' => $campo ? $campo->tipo_calculo : null,
+                            'tipo_resultado' => $campo ? $campo->tipo_resultado : null
                         ];
                     }
                 } else {
@@ -315,7 +317,8 @@ class GastoController extends Controller
                                 'nombre' => $subcategoria->nombre,
                                 'valor' => $subtotalValue,
                                 'orden' => $subcategoria->orden,
-                                'tipo_calculo' => $subcategoria->campo ? $subcategoria->campo->tipo_calculo : null
+                                'tipo_calculo' => $subcategoria->campo ? $subcategoria->campo->tipo_calculo : null,
+                                'tipo_resultado' => $subcategoria->campo ? $subcategoria->campo->tipo_resultado : null
                             ];
                         }
                     }
@@ -334,7 +337,8 @@ class GastoController extends Controller
                             'nombre' => $subcategoria->nombre,
                             'valor' => $subtotalValue,
                             'orden' => $subcategoria->orden,
-                            'tipo_calculo' => $subcategoria->campo ? $subcategoria->campo->tipo_calculo : null
+                            'tipo_calculo' => $subcategoria->campo ? $subcategoria->campo->tipo_calculo : null,
+                            'tipo_resultado' => $subcategoria->campo ? $subcategoria->campo->tipo_resultado : null
                         ];
                     }
                 }
