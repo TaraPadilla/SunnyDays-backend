@@ -252,8 +252,9 @@ class GastoController extends Controller
             // Construir el objeto Balance ordenado
             $balance = [];
 
-            // Obtener todas las categorías ordenadas para incluir las compuestas sin gastos directos
+            // Obtener todas las categorías ordenadas para incluir las compuestas sin gastos directos, excluyendo las de tipo Ingreso
             $todasLasCategorias = \App\Models\Categoria::with(['campo', 'subcategorias.campo'])
+                ->where('tipo', '!=', 'Ingreso')
                 ->orderBy('orden', 'asc')
                 ->get();
 
