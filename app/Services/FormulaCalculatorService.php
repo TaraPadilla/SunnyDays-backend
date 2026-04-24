@@ -48,6 +48,10 @@ class FormulaCalculatorService
 
         try {
             $result = self::processByType($parentContext);
+            
+            // Aplicar formateo según tipo_resultado del campo
+            $result = self::applyResultFormatting($result, $parentContext);
+            
             self::$calculationCache[$cacheKey] = $result;
             return $result;
         } catch (\Exception $e) {
@@ -398,6 +402,48 @@ class FormulaCalculatorService
     public static function clearCache(): void
     {
         self::$calculationCache = [];
+    }
+
+    /**
+     * Aplica el formateo según el tipo_resultado del campo
+     */
+    private static function applyResultFormatting(float $result, $parentContext): float
+    {
+        $campo = self::getCampoFromContext($parentContext);
+        
+        if (!$campo || !$campo->tipo_resultado) {
+            return $result;
+        }
+
+        Log::debug('[FormulaCalculatorService] applyResultFormatting', [
+            'result_original' => $result,
+            'tipo_resultado' => $campo->tipo_resultado,
+            'campo_id' => $campo->id
+        ]);
+
+        switch ($campo->tipo_resultado) {
+            case 'PORCENTAJE':
+                // Convertir a porcentaje sin decimales (ej: 0.1 -> 10)
+                $percentageValue = round($result * 100, 0);
+                Log::debug('[FormulaCalculatorService] Porcentaje formateado', [
+                    'result_original' => $result,
+                    'percentage_value' => $percentageValue
+                ]);
+                return $percentageValue;
+                
+            case 'ENTERO':
+                // Redondear a entero sin decimales
+                return round($result, 0);
+                
+            case 'CURRENCY':
+                // Mantener como valor numérico para formateo en frontend
+                return round($result, 2);
+                
+            case 'OTRO':
+            default:
+                // Devolver el resultado original
+                return $result;
+        }
     }
 
     /**

@@ -21,6 +21,7 @@ class CampoResource extends JsonResource
             'tipo_calculo' => $this->tipo_calculo,
             'formula' => $this->formula,
             'estado' => $this->estado,
+            'tipo_resultado' => $this->tipo_resultado,
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,
         ];

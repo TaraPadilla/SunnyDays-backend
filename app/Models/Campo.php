@@ -17,7 +17,8 @@ class Campo extends Model
         'nombre',
         'tipo_calculo',
         'formula',
-        'estado'
+        'estado',
+        'tipo_resultado'
     ];
 
     /**

@@ -57,7 +57,8 @@ class CampoController extends Controller
                 'nombre' => 'nullable|string|max:255',
                 'tipo_calculo' => 'required|in:SUM,COMPUESTA,MANUAL',
                 'formula' => 'nullable|string',
-                'estado' => 'nullable|boolean'
+                'estado' => 'nullable|boolean',
+                'tipo_resultado' => 'nullable|in:PORCENTAJE,ENTERO,CURRENCY,OTRO'
             ]);
 
             $campo = Campo::create($validated);
@@ -166,7 +167,8 @@ class CampoController extends Controller
                 'nombre' => 'nullable|string|max:255',
                 'tipo_calculo' => 'nullable|in:SUM,COMPUESTA,MANUAL',
                 'formula' => 'nullable|string',
-                'estado' => 'nullable|boolean'
+                'estado' => 'nullable|boolean',
+                'tipo_resultado' => 'nullable|in:PORCENTAJE,ENTERO,CURRENCY,OTRO'
             ]);
 
             $campo->update($validated);
