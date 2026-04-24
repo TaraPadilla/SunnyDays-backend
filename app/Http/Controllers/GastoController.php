@@ -293,10 +293,13 @@ class GastoController extends Controller
                         $subcategoria = $gastosSubcategoria->first()->subcategoria;
                         $campo = $subcategoria->campo;
 
+                        $subtotalValue = $subcategoria->subtotal();
+                        $valorFormateado = strpos($subcategoria->nombre, '%') !== false ? $subtotalValue . '%' : $subtotalValue;
+                        
                         $balance[$categoria->id]['subcategorias'][$subcategoriaId] = [
                             'id' => $subcategoria->id,
                             'nombre' => $subcategoria->nombre,
-                            'valor' => $subcategoria->subtotal(),
+                            'valor' => $valorFormateado,
                             'orden' => $subcategoria->orden,
                             'tipo_calculo' => $campo ? $campo->tipo_calculo : null
                         ];
@@ -306,10 +309,13 @@ class GastoController extends Controller
                     if ($categoria->campo && $categoria->campo->tipo_calculo === 'COMPUESTA') {
                         $subcategoriasOrdenadas = $categoria->subcategorias->sortBy('orden');
                         foreach ($subcategoriasOrdenadas as $subcategoria) {
+                            $subtotalValue = $subcategoria->subtotal();
+                            $valorFormateado = strpos($subcategoria->nombre, '%') !== false ? $subtotalValue . '%' : $subtotalValue;
+                            
                             $balance[$categoria->id]['subcategorias'][$subcategoria->id] = [
                                 'id' => $subcategoria->id,
                                 'nombre' => $subcategoria->nombre,
-                                'valor' => $subcategoria->subtotal(),
+                                'valor' => $valorFormateado,
                                 'orden' => $subcategoria->orden,
                                 'tipo_calculo' => $subcategoria->campo ? $subcategoria->campo->tipo_calculo : null
                             ];
@@ -323,10 +329,13 @@ class GastoController extends Controller
                     if (!isset($balance[$categoria->id]['subcategorias'][$subcategoria->id]) && 
                         $subcategoria->campo && 
                         $subcategoria->campo->tipo_calculo === 'COMPUESTA') {
+                        $subtotalValue = $subcategoria->subtotal();
+                        $valorFormateado = strpos($subcategoria->nombre, '%') !== false ? $subtotalValue . '%' : $subtotalValue;
+                        
                         $balance[$categoria->id]['subcategorias'][$subcategoria->id] = [
                             'id' => $subcategoria->id,
                             'nombre' => $subcategoria->nombre,
-                            'valor' => $subcategoria->subtotal(),
+                            'valor' => $valorFormateado,
                             'orden' => $subcategoria->orden,
                             'tipo_calculo' => $subcategoria->campo ? $subcategoria->campo->tipo_calculo : null
                         ];
