@@ -20,11 +20,34 @@ class FormulaCalculatorService
     private static $context = [];
 
     /**
+     * Filtros aplicados desde el controlador (para cálculos SUM)
+     */
+    private static $filters = [];
+
+    /**
      * Asigna el contexto externo para valores MANUAL
      */
     public static function setContext(array $context): void
     {
         self::$context = $context;
+    }
+
+    /**
+     * Asigna los filtros para cálculos SUM
+     */
+    public static function setFilters(array $filters): void
+    {
+        self::$filters = $filters;
+    }
+
+    /**
+     * Limpia el contexto y filtros
+     */
+    public static function clearAll(): void
+    {
+        self::$context = [];
+        self::$filters = [];
+        self::clearCache();
     }
 
     /**
@@ -125,14 +148,41 @@ class FormulaCalculatorService
             
             return $total;
         } elseif ($parentContext instanceof Subcategoria) {
-            // Sumar montos de todos los gastos
-            $total = $parentContext->gastos()->sum('monto_total');
+            // Sumar montos de todos los gastos aplicando filtros si existen
+            $query = $parentContext->gastos();
+            
+            // Aplicar filtros de fecha si están configurados
+            if (!empty(self::$filters)) {
+                if (isset(self::$filters['fecha_desde'])) {
+                    $query->whereDate('fecha', '>=', self::$filters['fecha_desde']);
+                    Log::debug('[FormulaCalculatorService] calculateSum aplicando filtro fecha_desde', [
+                        'fecha_desde' => self::$filters['fecha_desde']
+                    ]);
+                }
+                
+                if (isset(self::$filters['fecha_hasta'])) {
+                    $query->whereDate('fecha', '<=', self::$filters['fecha_hasta']);
+                    Log::debug('[FormulaCalculatorService] calculateSum aplicando filtro fecha_hasta', [
+                        'fecha_hasta' => self::$filters['fecha_hasta']
+                    ]);
+                }
+                
+                if (isset(self::$filters['inmueble_id'])) {
+                    $query->where('inmueble_id', self::$filters['inmueble_id']);
+                    Log::debug('[FormulaCalculatorService] calculateSum aplicando filtro inmueble_id', [
+                        'inmueble_id' => self::$filters['inmueble_id']
+                    ]);
+                }
+            }
+            
+            $total = $query->sum('monto_total');
             
             Log::debug('[FormulaCalculatorService] calculateSum', [
                 'type' => 'Subcategoria',
                 'subcategoria_id' => $parentContext->id,
-                'gastos_count' => $parentContext->gastos()->count(),
-                'total' => $total
+                'gastos_count' => $query->count(),
+                'total' => $total,
+                'filters_applied' => self::$filters
             ]);
             
             return $total;

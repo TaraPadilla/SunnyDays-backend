@@ -170,6 +170,22 @@ class GastoController extends Controller
                 FormulaCalculatorService::setContext($contexto);
             }
             
+            // Establecer filtros para cálculos SUM
+            $filters = [];
+            if ($request->filled('fecha_desde')) {
+                $filters['fecha_desde'] = $request->input('fecha_desde');
+            }
+            if ($request->filled('fecha_hasta')) {
+                $filters['fecha_hasta'] = $request->input('fecha_hasta');
+            }
+            if ($request->filled('inmueble_id')) {
+                $filters['inmueble_id'] = $request->inmueble_id;
+            }
+            
+            FormulaCalculatorService::setFilters($filters);
+            
+            Log::debug('[GastoController] generarBalance: filtros establecidos para cálculos', ['filters' => $filters]);
+            
             Log::debug('[GastoController] generarBalance: construyendo consulta con filtros');
             $query = Gasto::with(['inmueble', 'categoria.campo', 'subcategoria.campo']);
 
@@ -192,6 +208,9 @@ class GastoController extends Controller
                 $query->where('inmueble_id', $request->inmueble_id);
                 Log::debug('[GastoController] generarBalance: aplicando filtro inmueble_id', ['inmueble_id' => $request->inmueble_id]);
             }
+
+            //Para pruebas pongamos donde la categoria sea 1 y 2
+            
 
             // Log de la consulta SQL antes de ejecutarla
             Log::info('[GastoController] generarBalance: SQL query', [
@@ -367,8 +386,8 @@ class GastoController extends Controller
                 'data' => $balance
             ], 200);
             
-            // Limpiar el contexto después de usarlo
-            FormulaCalculatorService::setContext([]);
+            // Limpiar el contexto y filtros después de usarlos
+            FormulaCalculatorService::clearAll();
             
             return $response;
         } catch (\Exception $e) {
@@ -378,8 +397,8 @@ class GastoController extends Controller
                 'line' => $e->getLine(),
             ]);
 
-            // Limpiar el contexto incluso en caso de error
-            FormulaCalculatorService::setContext([]);
+            // Limpiar el contexto y filtros incluso en caso de error
+            FormulaCalculatorService::clearAll();
 
             return response()->json([
                 'status' => 'error',
