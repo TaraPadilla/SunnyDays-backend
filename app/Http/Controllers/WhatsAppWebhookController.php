@@ -15,16 +15,17 @@ class WhatsAppWebhookController extends Controller
     public function verify(Request $request): Response
     {
         Log::info('WhatsApp Webhook - Verificación iniciada', [
-            'hub_mode' => $request->get('hub.mode'),
-            'hub_verify_token' => $request->get('hub.verify_token'),
-            'hub_challenge' => $request->get('hub.challenge'),
+            'all_query_params' => $request->query(),
+            'hub_mode' => $request->query('hub.mode'),
+            'hub_verify_token' => $request->query('hub.verify_token'),
+            'hub_challenge' => $request->query('hub.challenge'),
             'ip' => $request->ip(),
             'user_agent' => $request->userAgent(),
         ]);
 
-        $hubMode = $request->get('hub.mode');
-        $hubVerifyToken = $request->get('hub.verify_token');
-        $hubChallenge = $request->get('hub.challenge');
+        $hubMode = $request->query('hub.mode');
+        $hubVerifyToken = $request->query('hub.verify_token');
+        $hubChallenge = $request->query('hub.challenge');
         $expectedToken = env('WHATSAPP_VERIFY_TOKEN');
 
         // Validar que el modo sea 'subscribe'
