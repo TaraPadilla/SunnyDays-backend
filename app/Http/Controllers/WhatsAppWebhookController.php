@@ -60,4 +60,25 @@ class WhatsAppWebhookController extends Controller
         return response($hubChallenge, 200)
             ->header('Content-Type', 'text/plain');
     }
+
+    /**
+     * Recepción de eventos y mensajes del webhook de WhatsApp Cloud API
+     * Meta envía aquí todos los eventos: mensajes, cambios de estado, etc.
+     */
+    public function receive(Request $request): \Illuminate\Http\JsonResponse
+    {
+        // Registrar información completa para debugging
+        Log::info('WhatsApp Webhook - Evento recibido', [
+            'headers' => $request->headers->all(),
+            'body' => $request->getContent(),
+            'json' => $request->json(),
+            'ip' => $request->ip(),
+            'user_agent' => $request->userAgent(),
+            'content_type' => $request->header('Content-Type'),
+            'content_length' => $request->header('Content-Length'),
+        ]);
+
+        // Responder siempre con éxito para confirmar recepción
+        return response()->json(['success' => true], 200);
+    }
 }
