@@ -13,6 +13,7 @@ use App\Http\Controllers\BalanceController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\WhatsAppWebhookController;
 
 /*
 |--------------------------------------------------------------------------
@@ -26,6 +27,9 @@ Route::post('/login', [AuthController::class, 'login']);
 // Integración n8n (se dejan públicas por ahora)
 Route::post('/process-document', [ReceiptController::class, 'process']);
 Route::get('/check-n8n-availability', [ReceiptController::class, 'checkN8nAvailability']);
+
+// WhatsApp Cloud API Webhook (verificación)
+Route::get('/whatsapp/webhook', [WhatsAppWebhookController::class, 'verify']);
 
 
 /*
