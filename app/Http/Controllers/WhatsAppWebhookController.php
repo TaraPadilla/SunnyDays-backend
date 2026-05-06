@@ -67,11 +67,18 @@ class WhatsAppWebhookController extends Controller
      */
     public function receive(Request $request): \Illuminate\Http\JsonResponse
     {
+        // Leer el payload raw y decodificarlo manualmente
+        $rawBody = $request->getContent();
+        $payload = json_decode($rawBody, true);
+        $jsonError = json_last_error_msg();
+
         // Registrar información completa para debugging
         Log::info('WhatsApp Webhook - Evento recibido', [
             'headers' => $request->headers->all(),
-            'body' => $request->getContent(),
-            'json' => $request->json(),
+            'raw_body' => $rawBody,
+            'payload' => $payload,
+            'json_last_error_msg' => $jsonError,
+            'json_last_error' => json_last_error(),
             'ip' => $request->ip(),
             'user_agent' => $request->userAgent(),
             'content_type' => $request->header('Content-Type'),
