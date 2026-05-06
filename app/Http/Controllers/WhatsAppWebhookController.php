@@ -85,6 +85,26 @@ class WhatsAppWebhookController extends Controller
             'content_length' => $request->header('Content-Length'),
         ]);
 
+        // Extraer datos básicos del mensaje usando data_get() para evitar errores
+        $phoneNumberId = data_get($payload, 'entry.0.changes.0.value.metadata.phone_number_id');
+        $displayPhoneNumber = data_get($payload, 'entry.0.changes.0.value.metadata.display_phone_number');
+        $contactName = data_get($payload, 'entry.0.changes.0.value.contacts.0.profile.name');
+        $from = data_get($payload, 'entry.0.changes.0.value.messages.0.from');
+        $messageId = data_get($payload, 'entry.0.changes.0.value.messages.0.id');
+        $messageType = data_get($payload, 'entry.0.changes.0.value.messages.0.type');
+        $messageText = data_get($payload, 'entry.0.changes.0.value.messages.0.text.body');
+
+        // Loguear datos extraídos del mensaje
+        Log::info('WhatsApp Webhook - Mensaje extraído', [
+            'phone_number_id' => $phoneNumberId,
+            'display_phone_number' => $displayPhoneNumber,
+            'contact_name' => $contactName,
+            'from' => $from,
+            'message_id' => $messageId,
+            'message_type' => $messageType,
+            'message_text' => $messageText,
+        ]);
+
         // Responder siempre con éxito para confirmar recepción
         return response()->json(['success' => true], 200);
     }
