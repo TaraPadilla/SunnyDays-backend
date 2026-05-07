@@ -87,8 +87,8 @@ class WhatsAppExpenseFlowService
             'session_id' => $activeSession->id,
         ]);
 
-        // Por ahora solo logueamos, no avanzamos al siguiente paso
-        // TODO: Implementar lógica según el botón seleccionado
+        // Implementar lógica según el botón seleccionado
+        $this->handleDateSelection($from, $buttonId, $activeSession);
     }
 
     /**
@@ -104,6 +104,16 @@ class WhatsAppExpenseFlowService
         // Validar si el usuario quiere cancelar
         if ($this->isCancelCommand($messageText)) {
             $this->handleCancelCommand($from);
+            return;
+        }
+
+        // Verificar si estamos esperando fecha manual
+        $activeSession = WhatsAppSession::where('wa_id', $from)
+            ->whereNull('completed_at')
+            ->first();
+
+        if ($activeSession && $activeSession->estado_actual === 'SELECTING_DATE_MANUAL') {
+            $this->handleManualDateInput($from, $messageText, $activeSession);
             return;
         }
 
@@ -208,6 +218,139 @@ class WhatsAppExpenseFlowService
 
         // Enviar mensaje de confirmación
         $this->whatsAppMessageService->sendText($from, '✅ Proceso cancelado exitosamente.\n\nSi deseas registrar un nuevo gasto, simplemente envíame un mensaje.');
+    }
+
+    /**
+     * Handle date selection from buttons
+     */
+    private function handleDateSelection(string $from, string $buttonId, WhatsAppSession $session): void
+    {
+        if ($session->estado_actual !== 'SELECTING_DATE') {
+            Log::warning('WhatsApp Expense Flow - Botón de fecha recibido en estado incorrecto', [
+                'from' => $from,
+                'button_id' => $buttonId,
+                'estado_actual' => $session->estado_actual,
+            ]);
+            return;
+        }
+
+        if ($buttonId === 'TODAY') {
+            // Guardar fecha de hoy
+            $session->update([
+                'fecha_gasto' => now()->toDateString(),
+                'estado_actual' => 'SELECTING_PROPERTY',
+            ]);
+
+            Log::info('WhatsApp Expense Flow - Fecha hoy guardada', [
+                'from' => $from,
+                'session_id' => $session->id,
+                'fecha_gasto' => $session->fecha_gasto,
+            ]);
+
+            // TODO: Enviar mensaje para seleccionar propiedad
+            $this->whatsAppMessageService->sendText($from, '✅ Fecha registrada: hoy\n\nAhora selecciona la propiedad del gasto...');
+            
+        } elseif ($buttonId === 'OTHER_DATE') {
+            // Pedir fecha específica
+            $session->update(['estado_actual' => 'SELECTING_DATE_MANUAL']);
+
+            Log::info('WhatsApp Expense Flow - Solicitando fecha manual', [
+                'from' => $from,
+                'session_id' => $session->id,
+            ]);
+
+            $message = "Por favor, escribe la fecha del gasto en formato DD/MM/AAAA\n\nEjemplo: 25/12/2023";
+            $this->whatsAppMessageService->sendText($from, $message);
+            
+        } else {
+            Log::warning('WhatsApp Expense Flow - Botón de fecha no reconocido', [
+                'from' => $from,
+                'button_id' => $buttonId,
+            ]);
+        }
+    }
+
+    /**
+     * Handle manual date input from user
+     */
+    private function handleManualDateInput(string $from, ?string $messageText, WhatsAppSession $session): void
+    {
+        Log::info('WhatsApp Expense Flow - Procesando fecha manual', [
+            'from' => $from,
+            'message_text' => $messageText,
+            'session_id' => $session->id,
+        ]);
+
+        // Validar y transformar la fecha
+        $parsedDate = $this->parseAndValidateDate($messageText);
+
+        if (!$parsedDate) {
+            Log::warning('WhatsApp Expense Flow - Fecha inválida', [
+                'from' => $from,
+                'message_text' => $messageText,
+            ]);
+
+            $errorMessage = "❌ Formato de fecha inválido.\n\nPor favor, usa el formato DD/MM/AAAA\n\nEjemplos válidos:\n• 25/12/2023\n• 01/01/2024\n• 15-06-2023";
+            $this->whatsAppMessageService->sendText($from, $errorMessage);
+            return;
+        }
+
+        // Guardar fecha válida
+        $session->update([
+            'fecha_gasto' => $parsedDate->toDateString(),
+            'estado_actual' => 'SELECTING_PROPERTY',
+        ]);
+
+        Log::info('WhatsApp Expense Flow - Fecha manual guardada', [
+            'from' => $from,
+            'session_id' => $session->id,
+            'fecha_gasto' => $parsedDate->toDateString(),
+            'fecha_original' => $messageText,
+        ]);
+
+        $successMessage = "✅ Fecha registrada: {$parsedDate->format('d/m/Y')}\n\nAhora selecciona la propiedad del gasto...";
+        $this->whatsAppMessageService->sendText($from, $successMessage);
+    }
+
+    /**
+     * Parse and validate date in various formats
+     */
+    private function parseAndValidateDate(?string $dateText): ?\Carbon\Carbon
+    {
+        if (!$dateText) {
+            return null;
+        }
+
+        // Limpiar el texto: quitar espacios extra
+        $cleanText = trim($dateText);
+
+        // Patrones a probar
+        $formats = [
+            'd/m/Y',  // 25/12/2023
+            'd-m-Y',  // 25-12-2023
+            'd/m/y',  // 25/12/23
+            'd-m-y',  // 25-12-23
+        ];
+
+        foreach ($formats as $format) {
+            try {
+                $date = \Carbon\Carbon::createFromFormat($format, $cleanText);
+                
+                // Validar que la fecha sea razonable (no muy antigua ni muy futura)
+                $now = now();
+                $minDate = $now->copy()->subYears(2);
+                $maxDate = $now->copy()->addMonths(1);
+
+                if ($date->between($minDate, $maxDate)) {
+                    return $date;
+                }
+            } catch (\Exception $e) {
+                // Continuar con el siguiente formato
+                continue;
+            }
+        }
+
+        return null;
     }
 
     /**
