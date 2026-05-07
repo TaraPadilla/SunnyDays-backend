@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Http;
 
 class WhatsAppWebhookController extends Controller
 {
@@ -104,6 +105,47 @@ class WhatsAppWebhookController extends Controller
             'message_type' => $messageType,
             'message_text' => $messageText,
         ]);
+
+        // Enviar respuesta automática solo si es mensaje de texto y tiene remitente
+        if ($from && $messageType === 'text') {
+            $phoneNumberId = env('WHATSAPP_PHONE_NUMBER_ID');
+            $accessToken = env('WHATSAPP_ACCESS_TOKEN');
+
+            if ($phoneNumberId && $accessToken) {
+                $endpoint = "https://graph.facebook.com/v22.0/{$phoneNumberId}/messages";
+                
+                $payload = [
+                    'messaging_product' => 'whatsapp',
+                    'to' => $from,
+                    'type' => 'text',
+                    'text' => [
+                        'body' => 'Hola, recibimos tu mensaje.'
+                    ]
+                ];
+
+                try {
+                    $response = Http::withToken($accessToken)
+                        ->post($endpoint, $payload);
+
+                    Log::info('WhatsApp Webhook - Respuesta enviada', [
+                        'to' => $from,
+                        'request_payload' => $payload,
+                        'response_status' => $response->status(),
+                        'response_body' => $response->body(),
+                    ]);
+                } catch (\Exception $e) {
+                    Log::error('WhatsApp Webhook - Error al enviar respuesta', [
+                        'to' => $from,
+                        'error' => $e->getMessage(),
+                    ]);
+                }
+            } else {
+                Log::warning('WhatsApp Webhook - Configuración incompleta para enviar respuesta', [
+                    'phone_number_id_configured' => !empty($phoneNumberId),
+                    'access_token_configured' => !empty($accessToken),
+                ]);
+            }
+        }
 
         // Responder siempre con éxito para confirmar recepción
         return response()->json(['success' => true], 200);
