@@ -111,7 +111,21 @@ class WhatsAppWebhookController extends Controller
             $from = data_get($payload, 'entry.0.changes.0.value.messages.0.from');
             $messageId = data_get($payload, 'entry.0.changes.0.value.messages.0.id');
             $messageType = data_get($payload, 'entry.0.changes.0.value.messages.0.type');
-            $messageText = data_get($payload, 'entry.0.changes.0.value.messages.0.text.body');
+
+            // Extraer datos según el tipo de mensaje
+            $messageText = null;
+            $buttonId = null;
+            $buttonTitle = null;
+
+            if ($messageType === 'text') {
+                $messageText = data_get($payload, 'entry.0.changes.0.value.messages.0.text.body');
+            } elseif ($messageType === 'interactive') {
+                $interactiveType = data_get($payload, 'entry.0.changes.0.value.messages.0.interactive.type');
+                if ($interactiveType === 'button_reply') {
+                    $buttonId = data_get($payload, 'entry.0.changes.0.value.messages.0.interactive.button_reply.id');
+                    $buttonTitle = data_get($payload, 'entry.0.changes.0.value.messages.0.interactive.button_reply.title');
+                }
+            }
 
             Log::info('WhatsApp Webhook - Datos del mensaje', [
                 'phone_number_id' => $phoneNumberId,
@@ -121,14 +135,18 @@ class WhatsAppWebhookController extends Controller
                 'message_id' => $messageId,
                 'message_type' => $messageType,
                 'message_text' => $messageText,
+                'button_id' => $buttonId,
+                'button_title' => $buttonTitle,
             ]);
 
             // Delegar manejo del flujo conversacional al servicio especializado
-            if ($from && $messageType === 'text') {
+            if ($from && ($messageType === 'text' || $messageType === 'interactive')) {
                 $this->whatsAppExpenseFlowService->handleIncomingMessage([
                     'from' => $from,
                     'message_text' => $messageText,
                     'message_type' => $messageType,
+                    'button_id' => $buttonId,
+                    'button_title' => $buttonTitle,
                 ]);
             }
         } elseif ($hasStatuses) {

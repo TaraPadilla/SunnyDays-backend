@@ -23,16 +23,79 @@ class WhatsAppExpenseFlowService
         $from = $messageData['from'] ?? null;
         $messageText = $messageData['message_text'] ?? null;
         $messageType = $messageData['message_type'] ?? null;
+        $buttonId = $messageData['button_id'] ?? null;
+        $buttonTitle = $messageData['button_title'] ?? null;
 
-        if (!$from || $messageType !== 'text') {
+        if (!$from) {
             Log::info('WhatsApp Expense Flow - Mensaje ignorado', [
                 'from' => $from,
                 'message_type' => $messageType,
-                'reason' => 'Sin remitente o no es texto'
+                'reason' => 'Sin remitente'
             ]);
             return;
         }
 
+        // Manejar mensajes interactivos (botones)
+        if ($messageType === 'interactive' && $buttonId) {
+            $this->handleButtonSelection($from, $buttonId, $buttonTitle);
+            return;
+        }
+
+        // Manejar mensajes de texto (inicio de flujo)
+        if ($messageType === 'text') {
+            $this->handleTextMessage($from, $messageText);
+            return;
+        }
+
+        Log::info('WhatsApp Expense Flow - Mensaje ignorado', [
+            'from' => $from,
+            'message_type' => $messageType,
+            'reason' => 'Tipo de mensaje no manejado'
+        ]);
+    }
+
+    /**
+     * Handle button selection from interactive messages
+     */
+    private function handleButtonSelection(string $from, string $buttonId, string $buttonTitle): void
+    {
+        Log::info('WhatsApp Expense Flow - Botón seleccionado', [
+            'from' => $from,
+            'button_id' => $buttonId,
+            'button_title' => $buttonTitle,
+        ]);
+
+        // Buscar sesión activa
+        $activeSession = WhatsAppSession::where('wa_id', $from)
+            ->whereNull('completed_at')
+            ->first();
+
+        if (!$activeSession) {
+            Log::warning('WhatsApp Expense Flow - No hay sesión activa para botón', [
+                'from' => $from,
+                'button_id' => $buttonId,
+                'button_title' => $buttonTitle,
+            ]);
+            return;
+        }
+
+        Log::info('WhatsApp Expense Flow - Selección de botón procesada', [
+            'from' => $from,
+            'button_id' => $buttonId,
+            'button_title' => $buttonTitle,
+            'estado_actual' => $activeSession->estado_actual,
+            'session_id' => $activeSession->id,
+        ]);
+
+        // Por ahora solo logueamos, no avanzamos al siguiente paso
+        // TODO: Implementar lógica según el botón seleccionado
+    }
+
+    /**
+     * Handle text messages (start new flow)
+     */
+    private function handleTextMessage(string $from, ?string $messageText): void
+    {
         Log::info('WhatsApp Expense Flow - Iniciando manejo de mensaje', [
             'from' => $from,
             'message_text' => $messageText,
@@ -86,7 +149,7 @@ class WhatsAppExpenseFlowService
      */
     private function sendInitialMessage(string $to): void
     {
-        $body = "Hola, bienvenido a Sunny Days CTG.\n¿Qué fecha deseas usar para el gasto?";
+        $body = "Hola, bienvenido a Sunny Days ctg.\n¿Qué fecha deseas usar para registrar el gasto?";
         
         $buttons = [
             [
