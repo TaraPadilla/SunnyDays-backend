@@ -101,6 +101,12 @@ class WhatsAppExpenseFlowService
             'message_text' => $messageText,
         ]);
 
+        // Validar si el usuario quiere cancelar
+        if ($this->isCancelCommand($messageText)) {
+            $this->handleCancelCommand($from);
+            return;
+        }
+
         // Buscar sesión activa existente
         $existingSession = WhatsAppSession::where('wa_id', $from)
             ->whereNull('completed_at')
@@ -145,11 +151,67 @@ class WhatsAppExpenseFlowService
     }
 
     /**
+     * Check if the message is a cancel command
+     */
+    private function isCancelCommand(?string $messageText): bool
+    {
+        if (!$messageText) {
+            return false;
+        }
+
+        // Normalizar el texto: quitar espacios y convertir a minúsculas
+        $normalizedText = strtolower(trim($messageText));
+        
+        // Verificar si es "cancelar" o variaciones
+        return $normalizedText === 'cancelar';
+    }
+
+    /**
+     * Handle cancel command
+     */
+    private function handleCancelCommand(string $from): void
+    {
+        Log::info('WhatsApp Expense Flow - Comando CANCELAR detectado', [
+            'from' => $from,
+        ]);
+
+        // Buscar sesión activa
+        $activeSession = WhatsAppSession::where('wa_id', $from)
+            ->whereNull('completed_at')
+            ->first();
+
+        if (!$activeSession) {
+            Log::warning('WhatsApp Expense Flow - No hay sesión activa para cancelar', [
+                'from' => $from,
+            ]);
+            
+            // Enviar mensaje de confirmación aunque no haya sesión activa
+            $this->whatsAppMessageService->sendText($from, 'No hay ningún proceso activo para cancelar.');
+            return;
+        }
+
+        // Actualizar estado a CANCELLED
+        $activeSession->update([
+            'estado_actual' => 'CANCELLED',
+            'completed_at' => now(),
+        ]);
+
+        Log::info('WhatsApp Expense Flow - Sesión cancelada', [
+            'from' => $from,
+            'session_id' => $activeSession->id,
+            'previous_estado' => $activeSession->getOriginal('estado_actual'),
+        ]);
+
+        // Enviar mensaje de confirmación
+        $this->whatsAppMessageService->sendText($from, '✅ Proceso cancelado exitosamente.\n\nSi deseas registrar un nuevo gasto, simplemente envíame un mensaje.');
+    }
+
+    /**
      * Send initial message with date selection buttons
      */
     private function sendInitialMessage(string $to): void
     {
-        $body = "Hola, bienvenido a Sunny Days ctg.\n¿Qué fecha deseas usar para registrar el gasto?";
+        $body = "Hola, bienvenido a Sunny Days ctg.\n¿Qué fecha deseas usar para registrar el gasto?\n\n*Puedes escribir CANCELAR en cualquier momento para cancelar el proceso*";
         
         $buttons = [
             [
