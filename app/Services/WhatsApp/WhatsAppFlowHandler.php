@@ -222,7 +222,7 @@ class WhatsAppFlowHandler
         // Guardar subcategoría en la sesión
         $session->update([
             'categoria_gasto_id' => $subcategory->id,
-            'estado_actual' => 'SELECTING_AMOUNT',
+            'estado_actual' => 'SELECTING_AMOUNT_WITHOUT_VAT',
         ]);
 
         Log::info('WhatsApp Flow Handler - Subcategoría seleccionada', [
@@ -322,16 +322,22 @@ class WhatsAppFlowHandler
                 }
                 break;
                 
-            case 'SELECTING_AMOUNT':
-                // Solicitar monto del gasto
+            case 'SELECTING_AMOUNT_WITHOUT_VAT':
+                // Solicitar monto del gasto sin IVA
                 $this->messageService->sendText($from, 
-                    '💰 Por favor, ingresa el monto del gasto (solo números):'
+                    '💰 Por favor, ingresa el monto del gasto sin IVA (solo números):'
                 );
                 break;
                 
-            case 'SELECTING_PAYMENT_TYPE':
-                // Reenviar opciones de tipo de pago
-                $this->sendPaymentTypeOptions($from);
+            case 'SELECTING_VAT':
+                // Reenviar opciones de IVA
+                $this->sendVATOptions($from);
+                break;
+                
+            case 'SELECTING_TOTAL_AMOUNT':
+                // Reenviar solicitud de confirmación del total
+                $message = "Por favor, confirma el monto total respondiendo SI o NO:";
+                $this->messageService->sendText($from, $message);
                 break;
                 
             case 'SELECTING_OBSERVATIONS':
@@ -469,8 +475,8 @@ class WhatsAppFlowHandler
 
         // Guardar monto en la sesión
         $session->update([
-            'monto' => $amount,
-            'estado_actual' => 'SELECTING_PAYMENT_TYPE',
+            'monto_sin_iva' => $amount,
+            'estado_actual' => 'SELECTING_VAT',
         ]);
 
         Log::info('WhatsApp Flow Handler - Monto ingresado', [
@@ -479,48 +485,48 @@ class WhatsAppFlowHandler
             'amount' => $amount,
         ]);
 
-        // Enviar confirmación y solicitar tipo de pago
-        $confirmationMessage = "✅ Monto registrado: $" . number_format($amount, 2, ',', '.') . "\n\n" .
-                               "Ahora selecciona el tipo de pago:";
-        $this->sendPaymentTypeOptions($from);
+        // Enviar confirmación y solicitar IVA
+        $confirmationMessage = "✅ Monto sin IVA registrado: $" . number_format($amount, 2, ',', '.') . "\n\n" .
+                               "Ahora selecciona el porcentaje de IVA:";
+        $this->sendVATOptions($from);
     }
 
     /**
-     * Send payment type options
+     * Send VAT options
      */
-    private function sendPaymentTypeOptions(string $to): void
+    private function sendVATOptions(string $to): void
     {
         $buttons = [
-            ['id' => 'PAYMENT_EFECTIVO', 'title' => '💵 Efectivo'],
-            ['id' => 'PAYMENT_TRANSFERENCIA', 'title' => '🏦 Transferencia'],
-            ['id' => 'PAYMENT_TARJETA', 'title' => '💳 Tarjeta'],
-            ['id' => 'PAYMENT_OTRO', 'title' => '📋 Otro']
+            ['id' => 'VAT_19', 'title' => '� 19%'],
+            ['id' => 'VAT_0', 'title' => '📋 0%'],
+            ['id' => 'VAT_EXENTO', 'title' => '� Exento'],
+            ['id' => 'VAT_OTRO', 'title' => '� Otro valor']
         ];
 
-        $body = "💳 Selecciona el tipo de pago:\n\n" .
+        $body = "� Selecciona el porcentaje de IVA:\n\n" .
                 "*Puedes escribir CANCELAR en cualquier momento para cancelar el proceso*";
 
         $response = $this->messageService->sendButtons($to, $body, $buttons);
 
         if ($response) {
-            Log::info('WhatsApp Flow Handler - Opciones de pago enviadas', [
+            Log::info('WhatsApp Flow Handler - Opciones de IVA enviadas', [
                 'to' => $to,
                 'response_status' => $response['status'],
             ]);
         } else {
-            Log::error('WhatsApp Flow Handler - Error al enviar opciones de pago', [
+            Log::error('WhatsApp Flow Handler - Error al enviar opciones de IVA', [
                 'to' => $to,
             ]);
         }
     }
 
     /**
-     * Handle payment type selection
+     * Handle VAT selection
      */
-    public function handlePaymentTypeSelection(string $from, string $buttonId, WhatsAppSession $session): void
+    public function handleVATSelection(string $from, string $buttonId, WhatsAppSession $session): void
     {
-        if ($session->estado_actual !== 'SELECTING_PAYMENT_TYPE') {
-            Log::warning('WhatsApp Flow Handler - Tipo de pago recibido en estado incorrecto', [
+        if ($session->estado_actual !== 'SELECTING_VAT') {
+            Log::warning('WhatsApp Flow Handler - IVA recibido en estado incorrecto', [
                 'from' => $from,
                 'button_id' => $buttonId,
                 'estado_actual' => $session->estado_actual,
@@ -528,39 +534,97 @@ class WhatsAppFlowHandler
             return;
         }
 
-        // Validar y mapear el tipo de pago
-        $paymentTypes = [
-            'PAYMENT_EFECTIVO' => 'Efectivo',
-            'PAYMENT_TRANSFERENCIA' => 'Transferencia',
-            'PAYMENT_TARJETA' => 'Tarjeta',
-            'PAYMENT_OTRO' => 'Otro'
+        // Validar y mapear el IVA
+        $vatRates = [
+            'VAT_19' => 19,
+            'VAT_0' => 0,
+            'VAT_EXENTO' => 0,
+            'VAT_OTRO' => null // Pedirá valor manual
         ];
 
-        if (!isset($paymentTypes[$buttonId])) {
+        if (!isset($vatRates[$buttonId])) {
             $this->messageService->sendText($from, 
-                '❌ Opción de pago inválida. Por favor, selecciona una opción válida.'
+                '❌ Opción de IVA inválida. Por favor, selecciona una opción válida.'
             );
             return;
         }
 
-        $paymentType = $paymentTypes[$buttonId];
+        $vatRate = $vatRates[$buttonId];
 
-        // Guardar tipo de pago en la sesión
+        if ($vatRate === null) {
+            // Pedir valor manual de IVA
+            $session->update(['estado_actual' => 'SELECTING_VAT_MANUAL']);
+            $this->messageService->sendText($from, 
+                'Por favor, ingresa el porcentaje de IVA (ej: 19, 0, 5):'
+            );
+            return;
+        }
+
+        // Calcular IVA y guardar
+        $montoSinIva = $session->monto_sin_iva;
+        $ivaAmount = $montoSinIva * ($vatRate / 100);
+        $montoTotal = $montoSinIva + $ivaAmount;
+
         $session->update([
-            'tipo_pago' => $paymentType,
-            'estado_actual' => 'SELECTING_OBSERVATIONS',
+            'iva' => $ivaAmount,
+            'monto_total' => $montoTotal,
+            'estado_actual' => 'SELECTING_TOTAL_AMOUNT',
         ]);
 
-        Log::info('WhatsApp Flow Handler - Tipo de pago seleccionado', [
+        Log::info('WhatsApp Flow Handler - IVA seleccionado', [
             'from' => $from,
             'session_id' => $session->id,
-            'payment_type' => $paymentType,
+            'vat_rate' => $vatRate,
+            'iva_amount' => $ivaAmount,
+            'total_amount' => $montoTotal,
         ]);
 
-        // Enviar confirmación y solicitar observaciones
-        $confirmationMessage = "✅ Tipo de pago: {$paymentType}\n\n" .
-                               "Por favor, ingresa alguna observación o escribe 'NO' si no hay:";
+        // Enviar confirmación y solicitar confirmación del total
+        $confirmationMessage = "✅ IVA ({$vatRate}%): $" . number_format($ivaAmount, 2, ',', '.') . "\n\n" .
+                               "💰 *Monto total: $" . number_format($montoTotal, 2, ',', '.') . "*\n\n" .
+                               "¿Confirmas este monto total? Responde SI o NO:";
         $this->messageService->sendText($from, $confirmationMessage);
+    }
+
+    /**
+     * Handle total amount confirmation
+     */
+    public function handleTotalAmountConfirmation(string $from, string $message, WhatsAppSession $session): void
+    {
+        if ($session->estado_actual !== 'SELECTING_TOTAL_AMOUNT') {
+            Log::warning('WhatsApp Flow Handler - Confirmación de total recibida en estado incorrecto', [
+                'from' => $from,
+                'message' => $message,
+                'estado_actual' => $session->estado_actual,
+            ]);
+            return;
+        }
+
+        // Procesar confirmación
+        $confirmation = strtoupper(trim($message));
+        
+        if ($confirmation === 'SI' || $confirmation === 'S') {
+            // Confirmado, pasar a observaciones
+            $session->update(['estado_actual' => 'SELECTING_OBSERVATIONS']);
+            
+            $this->messageService->sendText($from, 
+                '✅ Monto total confirmado\n\n' .
+                'Por favor, ingresa alguna observación o escribe "NO" si no hay:'
+            );
+        } elseif ($confirmation === 'NO' || $confirmation === 'N') {
+            // No confirmado, regresar a IVA
+            $session->update([
+                'iva' => null,
+                'monto_total' => null,
+                'estado_actual' => 'SELECTING_VAT'
+            ]);
+            
+            $this->sendVATOptions($from);
+        } else {
+            $this->messageService->sendText($from, 
+                '❌ Respuesta inválida. Por favor, responde SI o NO:'
+            );
+        }
     }
 
     /**
@@ -606,8 +670,8 @@ class WhatsAppFlowHandler
     {
         try {
             // Validar que todos los datos necesarios estén presentes
-            if (!$session->fecha || !$session->inmueble_id || !$session->tipo_categoria_id || 
-                !$session->categoria_gasto_id || !$session->monto || !$session->tipo_pago) {
+            if (!$session->fecha_gasto || !$session->inmueble_id || !$session->tipo_categoria_id || 
+                !$session->categoria_gasto_id || !$session->monto_sin_iva || !$session->monto_total) {
                 
                 $this->messageService->sendText($from, 
                     '❌ Error: Faltan datos necesarios para guardar el gasto. Por favor, inicia el proceso nuevamente.'
@@ -620,12 +684,13 @@ class WhatsAppFlowHandler
 
             // Crear el gasto (aquí iría la lógica para guardar en la base de datos)
             $expenseData = [
-                'fecha' => $session->fecha,
+                'fecha_gasto' => $session->fecha_gasto,
                 'inmueble_id' => $session->inmueble_id,
                 'tipo_categoria_id' => $session->tipo_categoria_id,
                 'categoria_gasto_id' => $session->categoria_gasto_id,
-                'monto' => $session->monto,
-                'tipo_pago' => $session->tipo_pago,
+                'monto_sin_iva' => $session->monto_sin_iva,
+                'iva' => $session->iva,
+                'monto_total' => $session->monto_total,
                 'observaciones' => $session->observaciones,
                 'telefono' => $from,
                 'created_at' => now()
@@ -642,9 +707,10 @@ class WhatsAppFlowHandler
 
             // Enviar confirmación final
             $confirmationMessage = "✅ *Gasto registrado exitosamente*\n\n" .
-                                   "📅 Fecha: {$session->fecha}\n" .
-                                   "💰 Monto: $" . number_format($session->monto, 2, ',', '.') . "\n" .
-                                   "💳 Tipo de pago: {$session->tipo_pago}\n" .
+                                   "📅 Fecha: {$session->fecha_gasto}\n" .
+                                   "💰 Monto sin IVA: $" . number_format($session->monto_sin_iva, 2, ',', '.') . "\n" .
+                                   "� IVA: $" . number_format($session->iva, 2, ',', '.') . "\n" .
+                                   "💰 Monto total: $" . number_format($session->monto_total, 2, ',', '.') . "\n" .
                                    "📝 Observaciones: " . ($session->observaciones ?: 'Ninguna') . "\n\n" .
                                    "¡Gracias por usar el sistema! 🎉";
             
