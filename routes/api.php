@@ -28,8 +28,9 @@ Route::post('/login', [AuthController::class, 'login']);
 Route::post('/process-document', [ReceiptController::class, 'process']);
 Route::get('/check-n8n-availability', [ReceiptController::class, 'checkN8nAvailability']);
 
-// WhatsApp Cloud API Webhook (verificación)
-Route::get('/whatsapp/webhook', [WhatsAppWebhookController::class, 'verify']);
+// WhatsApp Cloud API Webhook
+Route::get('/whatsapp/webhook', [WhatsAppWebhookController::class, 'verify']);    // GET: webhook verification
+Route::post('/whatsapp/webhook', [WhatsAppWebhookController::class, 'receive']);  // POST: incoming events/messages
 
 
 /*

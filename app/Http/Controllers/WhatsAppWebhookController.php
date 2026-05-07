@@ -60,4 +60,117 @@ class WhatsAppWebhookController extends Controller
         return response($hubChallenge, 200)
             ->header('Content-Type', 'text/plain');
     }
+
+    /**
+     * Recepción de eventos y mensajes del webhook de WhatsApp Cloud API
+     * Meta envía aquí todos los eventos: mensajes, cambios de estado, etc.
+     */
+    public function receive(Request $request): \Illuminate\Http\JsonResponse
+    {
+        // Leer el payload raw y decodificarlo manualmente
+        $rawBody = $request->getContent();
+        $payload = json_decode($rawBody, true);
+        $jsonError = json_last_error_msg();
+
+        // Registrar información completa para debugging
+        Log::info('WhatsApp Webhook - Evento recibido', [
+            'headers' => $request->headers->all(),
+            'raw_body' => $rawBody,
+            'payload' => $payload,
+            'json_last_error_msg' => $jsonError,
+            'json_last_error' => json_last_error(),
+            'ip' => $request->ip(),
+            'user_agent' => $request->userAgent(),
+            'content_type' => $request->header('Content-Type'),
+            'content_length' => $request->header('Content-Length'),
+        ]);
+
+        // Detectar tipo de evento: mensajes vs status
+        $hasMessages = !empty(data_get($payload, 'entry.0.changes.0.value.messages'));
+        $hasStatuses = !empty(data_get($payload, 'entry.0.changes.0.value.statuses'));
+
+        if ($hasMessages) {
+            Log::info('WhatsApp Webhook - Mensaje entrante detectado');
+
+            // Extraer datos del mensaje
+            $phoneNumberId = data_get($payload, 'entry.0.changes.0.value.metadata.phone_number_id');
+            $displayPhoneNumber = data_get($payload, 'entry.0.changes.0.value.metadata.display_phone_number');
+            $contactName = data_get($payload, 'entry.0.changes.0.value.contacts.0.profile.name');
+            $from = data_get($payload, 'entry.0.changes.0.value.messages.0.from');
+            $messageId = data_get($payload, 'entry.0.changes.0.value.messages.0.id');
+            $messageType = data_get($payload, 'entry.0.changes.0.value.messages.0.type');
+            $messageText = data_get($payload, 'entry.0.changes.0.value.messages.0.text.body');
+
+            Log::info('WhatsApp Webhook - Datos del mensaje', [
+                'phone_number_id' => $phoneNumberId,
+                'display_phone_number' => $displayPhoneNumber,
+                'contact_name' => $contactName,
+                'from' => $from,
+                'message_id' => $messageId,
+                'message_type' => $messageType,
+                'message_text' => $messageText,
+            ]);
+
+            // Enviar respuesta automática solo si es mensaje de texto y tiene remitente
+            if ($from && $messageType === 'text') {
+                $phoneNumberId = env('WHATSAPP_PHONE_NUMBER_ID');
+                $accessToken = env('WHATSAPP_ACCESS_TOKEN');
+
+                if ($phoneNumberId && $accessToken) {
+                    $endpoint = "https://graph.facebook.com/v22.0/{$phoneNumberId}/messages";
+                    
+                    $payload = [
+                        'messaging_product' => 'whatsapp',
+                        'to' => $from,
+                        'type' => 'text',
+                        'text' => [
+                            'body' => 'Hola, recibimos tu mensaje.'
+                        ]
+                    ];
+
+                    try {
+                        $response = Http::withToken($accessToken)
+                            ->post($endpoint, $payload);
+
+                        Log::info('WhatsApp Webhook - Respuesta enviada', [
+                            'to' => $from,
+                            'request_payload' => $payload,
+                            'response_status' => $response->status(),
+                            'response_body' => $response->body(),
+                        ]);
+                    } catch (\Exception $e) {
+                        Log::error('WhatsApp Webhook - Error al enviar respuesta', [
+                            'to' => $from,
+                            'error' => $e->getMessage(),
+                        ]);
+                    }
+                } else {
+                    Log::warning('WhatsApp Webhook - Configuración incompleta para enviar respuesta', [
+                        'phone_number_id_configured' => !empty($phoneNumberId),
+                        'access_token_configured' => !empty($accessToken),
+                    ]);
+                }
+            }
+        } elseif ($hasStatuses) {
+            Log::info('WhatsApp Webhook - Status update detectado');
+
+            // Extraer datos del status
+            $status = data_get($payload, 'entry.0.changes.0.value.statuses.0.status');
+            $recipientId = data_get($payload, 'entry.0.changes.0.value.statuses.0.recipient_id');
+            $statusMessageId = data_get($payload, 'entry.0.changes.0.value.statuses.0.id');
+
+            Log::info('WhatsApp Webhook - Datos del status', [
+                'status' => $status,
+                'recipient_id' => $recipientId,
+                'message_id' => $statusMessageId,
+            ]);
+        } else {
+            Log::info('WhatsApp Webhook - Evento no reconocido', [
+                'payload_structure' => array_keys($payload ?? []),
+            ]);
+        }
+
+        // Responder siempre con éxito para confirmar recepción
+        return response()->json(['success' => true], 200);
+    }
 }
