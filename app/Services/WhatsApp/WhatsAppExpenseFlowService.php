@@ -160,11 +160,18 @@ class WhatsAppExpenseFlowService
                 if ($existingSession->estado_actual === 'SELECTING_DATE_MANUAL') {
                     // Manejar entrada manual de fecha
                     $this->flowHandler->handleManualDateInput($from, $messageText, $existingSession);
-                } elseif ($existingSession->estado_actual === 'SELECTING_AMOUNT') {
-                    // TODO: Implementar manejo de monto
-                    $this->whatsAppMessageService->sendText($from, 
-                        '💰 Monto recibido. Próximamente implementaremos el registro final del gasto.'
-                    );
+                } elseif ($existingSession->estado_actual === 'SELECTING_AMOUNT_WITHOUT_VAT') {
+                    // Manejar entrada de monto sin IVA
+                    $this->flowHandler->handleAmountInput($from, $messageText, $existingSession);
+                } elseif ($existingSession->estado_actual === 'SELECTING_VAT_MANUAL') {
+                    // Manejar entrada manual de IVA
+                    $this->handleManualVATInput($from, $messageText, $existingSession);
+                } elseif ($existingSession->estado_actual === 'SELECTING_TOTAL_AMOUNT') {
+                    // Manejar confirmación de monto total
+                    $this->flowHandler->handleTotalAmountConfirmation($from, $messageText, $existingSession);
+                } elseif ($existingSession->estado_actual === 'SELECTING_OBSERVATIONS') {
+                    // Manejar entrada de observaciones
+                    $this->flowHandler->handleObservationsInput($from, $messageText, $existingSession);
                 } else {
                     // Para otros estados, enviar mensaje correspondiente
                     $this->flowHandler->sendNextStepMessage($from, $existingSession);
@@ -259,5 +266,74 @@ class WhatsAppExpenseFlowService
         // Enviar mensaje inicial y actualizar estado
         $this->flowHandler->sendInitialMessage($from);
         $newSession->update(['estado_actual' => 'SELECTING_DATE']);
+    }
+
+    /**
+     * Handle manual VAT input from user
+     */
+    private function handleManualVATInput(string $from, string $messageText, WhatsAppSession $session): void
+    {
+        Log::info('WhatsApp Expense Flow - Procesando IVA manual', [
+            'from' => $from,
+            'message_text' => $messageText,
+            'session_id' => $session->id,
+        ]);
+
+        // Validar que sea un número válido
+        $vatRate = $this->parsePercentage($messageText);
+        if ($vatRate === null || $vatRate < 0 || $vatRate > 100) {
+            $this->whatsAppMessageService->sendText($from, 
+                '❌ Porcentaje de IVA inválido. Ingresa un valor entre 0 y 100 (ej: 19, 0, 5):'
+            );
+            return;
+        }
+
+        // Calcular IVA y guardar
+        $montoSinIva = $session->monto_sin_iva;
+        $ivaAmount = $montoSinIva * ($vatRate / 100);
+        $montoTotal = $montoSinIva + $ivaAmount;
+
+        $session->update([
+            'iva' => $ivaAmount,
+            'monto_total' => $montoTotal,
+            'estado_actual' => 'SELECTING_TOTAL_AMOUNT',
+        ]);
+
+        Log::info('WhatsApp Expense Flow - IVA manual procesado', [
+            'from' => $from,
+            'session_id' => $session->id,
+            'vat_rate' => $vatRate,
+            'iva_amount' => $ivaAmount,
+            'total_amount' => $montoTotal,
+        ]);
+
+        // Enviar confirmación y solicitar confirmación del total
+        $confirmationMessage = "✅ IVA ({$vatRate}%): $" . number_format($ivaAmount, 2, ',', '.') . "\n\n" .
+                               "💰 *Monto total: $" . number_format($montoTotal, 2, ',', '.') . "*\n\n" .
+                               "¿Confirmas este monto total? Responde SI o NO:";
+        $this->whatsAppMessageService->sendText($from, $confirmationMessage);
+    }
+
+    /**
+     * Parse percentage from text input
+     */
+    private function parsePercentage(string $input): ?float
+    {
+        // Limpiar y extraer número
+        $cleanText = preg_replace('/[^0-9.,]/', '', $input);
+        $cleanText = str_replace(',', '.', $cleanText);
+        
+        if (!is_numeric($cleanText)) {
+            return null;
+        }
+        
+        $percentage = (float) $cleanText;
+        
+        // Validar rango
+        if ($percentage < 0 || $percentage > 100) {
+            return null;
+        }
+        
+        return $percentage;
     }
 }
