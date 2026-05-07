@@ -107,9 +107,12 @@ class WhatsAppExpenseFlowService
             return;
         }
 
-        // Buscar sesión activa existente
+        // Buscar sesión existente (activa o cancelada) para reiniciar flujo
         $existingSession = WhatsAppSession::where('wa_id', $from)
-            ->whereNull('completed_at')
+            ->where(function($query) {
+                $query->whereNull('completed_at')
+                      ->orWhere('estado_actual', 'CANCELLED');
+            })
             ->first();
 
         if ($existingSession) {
@@ -117,6 +120,7 @@ class WhatsAppExpenseFlowService
                 'from' => $from,
                 'previous_session_id' => $existingSession->id,
                 'previous_estado' => $existingSession->estado_actual,
+                'was_cancelled' => $existingSession->estado_actual === 'CANCELLED',
             ]);
 
             // Soft delete de sesión anterior
