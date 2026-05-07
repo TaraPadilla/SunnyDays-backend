@@ -124,6 +124,9 @@ class WhatsAppWebhookController extends Controller
                 if ($interactiveType === 'button_reply') {
                     $buttonId = data_get($payload, 'entry.0.changes.0.value.messages.0.interactive.button_reply.id');
                     $buttonTitle = data_get($payload, 'entry.0.changes.0.value.messages.0.interactive.button_reply.title');
+                } elseif ($interactiveType === 'list_reply') {
+                    $buttonId = data_get($payload, 'entry.0.changes.0.value.messages.0.interactive.list_reply.id');
+                    $buttonTitle = data_get($payload, 'entry.0.changes.0.value.messages.0.interactive.list_reply.title');
                 }
             }
 
