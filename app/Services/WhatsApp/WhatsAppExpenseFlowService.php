@@ -295,22 +295,21 @@ class WhatsAppExpenseFlowService
             'session_id' => $session->id,
         ]);
 
-        // Validar que sea un número válido
-        $vatRate = $this->parsePercentage($messageText);
-        if ($vatRate === null || $vatRate < 0 || $vatRate > 100) {
+        // Validar que sea un número válido (monto de IVA)
+        $vatAmount = $this->parseAmount($messageText);
+        if ($vatAmount === null || $vatAmount < 0) {
             $this->whatsAppMessageService->sendText($from, 
-                '❌ Porcentaje de IVA inválido. Ingresa un valor entre 0 y 100 (ej: 19, 0, 5):'
+                '❌ Monto de IVA inválido. Ingresa un valor positivo (ej: 19000, 0, 500):'
             );
             return;
         }
 
-        // Calcular IVA y guardar
+        // Calcular monto total y guardar
         $montoSinIva = $session->monto_sin_iva;
-        $ivaAmount = $montoSinIva * ($vatRate / 100);
-        $montoTotal = $montoSinIva + $ivaAmount;
+        $montoTotal = $montoSinIva + $vatAmount;
 
         $session->update([
-            'iva' => $ivaAmount,
+            'iva' => $vatAmount,
             'monto_total' => $montoTotal,
             'estado_actual' => 'SELECTING_TOTAL_AMOUNT',
         ]);
@@ -318,13 +317,12 @@ class WhatsAppExpenseFlowService
         Log::info('WhatsApp Expense Flow - IVA manual procesado', [
             'from' => $from,
             'session_id' => $session->id,
-            'vat_rate' => $vatRate,
-            'iva_amount' => $ivaAmount,
+            'vat_amount' => $vatAmount,
             'total_amount' => $montoTotal,
         ]);
 
         // Enviar confirmación y solicitar confirmación del total
-        $confirmationMessage = "✅ IVA ({$vatRate}%): $" . number_format($ivaAmount, 2, ',', '.') . "\n\n" .
+        $confirmationMessage = "✅ IVA: $" . number_format($vatAmount, 2, ',', '.') . "\n\n" .
                                "💰 *Monto total: $" . number_format($montoTotal, 2, ',', '.') . "*\n\n" .
                                "¿Confirmas este monto total? Responde SI o NO:";
         $this->whatsAppMessageService->sendText($from, $confirmationMessage);

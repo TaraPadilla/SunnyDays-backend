@@ -490,14 +490,14 @@ class WhatsAppFlowHandler
     private function sendVATOptions(string $to): void
     {
         $buttons = [
-            ['id' => 'VAT_19', 'title' => '� 19%'],
-            ['id' => 'VAT_0', 'title' => '📋 0%'],
-            ['id' => 'VAT_EXENTO', 'title' => '� Exento'],
-            ['id' => 'VAT_OTRO', 'title' => '� Otro valor']
+            ['id' => 'VAT_19000', 'title' => 'IVA $19.000'],
+            ['id' => 'VAT_0', 'title' => 'IVA $0'],
+            ['id' => 'VAT_OTRO', 'title' => 'Otro valor']
         ];
 
-        $body = "� Selecciona el porcentaje de IVA:\n\n" .
-                "*Puedes escribir CANCELAR en cualquier momento para cancelar el proceso*";
+        $body = "💰 Selecciona el monto del IVA:\n\n" .
+                "*Puedes escribir CANCELAR en cualquier momento para cancelar el proceso*\n\n" .
+                "Ejemplo: Si el gasto es $100.000 y el IVA es $19.000, selecciona '$19.000'";
 
         $response = $this->messageService->sendButtons($to, $body, $buttons);
 
@@ -527,34 +527,32 @@ class WhatsAppFlowHandler
             return;
         }
 
-        // Validar y mapear el IVA
-        $vatRates = [
-            'VAT_19' => 19,
+        // Validar y mapear el IVA (ahora son montos directos)
+        $vatAmounts = [
+            'VAT_19000' => 19000,
             'VAT_0' => 0,
-            'VAT_EXENTO' => 0,
             'VAT_OTRO' => null // Pedirá valor manual
         ];
 
-        if (!isset($vatRates[$buttonId])) {
+        if (!isset($vatAmounts[$buttonId])) {
             $this->messageService->sendText($from, 
                 '❌ Opción de IVA inválida. Por favor, selecciona una opción válida.'
             );
             return;
         }
 
-        $vatRate = $vatRates[$buttonId];
+        $ivaAmount = $vatAmounts[$buttonId];
 
-        if ($vatRate === null) {
+        if ($ivaAmount === null) {
             // Pedir valor manual de IVA - mantenerse en SELECTING_VAT
             $this->messageService->sendText($from, 
-                'Por favor, ingresa el porcentaje de IVA (ej: 19, 0, 5):'
+                'Por favor, ingresa el monto del IVA (ej: 19000, 0):'
             );
             return;
         }
 
-        // Calcular IVA y guardar
+        // Calcular monto total y guardar
         $montoSinIva = $session->monto_sin_iva;
-        $ivaAmount = $montoSinIva * ($vatRate / 100);
         $montoTotal = $montoSinIva + $ivaAmount;
 
         $session->update([
