@@ -5,6 +5,7 @@ namespace App\Services\WhatsApp;
 use App\Models\WhatsAppSession;
 use App\Http\Controllers\InmuebleController;
 use App\Http\Controllers\CategoriaController;
+use App\Http\Controllers\SubcategoriaController;
 use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
 
@@ -17,7 +18,8 @@ class WhatsAppExpenseFlowService
         WhatsAppMessageService $whatsAppMessageService,
         WhatsAppFlowHandler $flowHandler,
         InmuebleController $inmuebleController,
-        CategoriaController $categoriaController
+        CategoriaController $categoriaController,
+        SubcategoriaController $subcategoriaController
     ) {
         $this->whatsAppMessageService = $whatsAppMessageService;
         $this->flowHandler = $flowHandler;

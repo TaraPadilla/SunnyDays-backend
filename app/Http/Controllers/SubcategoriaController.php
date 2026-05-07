@@ -62,6 +62,61 @@ class SubcategoriaController extends Controller
     }
 
     /**
+     * Get subcategories by category ID.
+     */
+    public function getByCategoria(Request $request, int $categoriaId): JsonResponse
+    {
+        Log::info('[SubcategoriaController] getByCategoria: petición recibida', [
+            'categoria_id' => $categoriaId
+        ]);
+        
+        try {
+            $user = auth()->user();
+            $isAdmin = $user && $user->perfil === 'admin';
+            
+            $query = Subcategoria::where('categoria_id', $categoriaId)
+                ->where('estado', true)
+                ->with(['categoria', 'campo'])
+                ->orderBy('orden')
+                ->orderBy('nombre');
+            
+            // If not admin, only return subcategories under expense categories
+            if (!$isAdmin) {
+                $query->whereHas('categoria', function($categoryQuery) {
+                    $categoryQuery->where('tipo', 'Egreso');
+                });
+            }
+            
+            $subcategorias = $query->get();
+            
+            Log::info('[SubcategoriaController] getByCategoria: éxito', [
+                'categoria_id' => $categoriaId,
+                'total' => $subcategorias->count(),
+                'is_admin' => $isAdmin
+            ]);
+            
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Subcategorías obtenidas correctamente',
+                'data' => SubcategoriaResource::collection($subcategorias)
+            ], 200);
+        } catch (\Exception $e) {
+            Log::error('[SubcategoriaController] getByCategoria: excepción', [
+                'categoria_id' => $categoriaId,
+                'message' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine()
+            ]);
+            
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Error al obtener subcategorías',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
      * Store a newly created subcategoria in storage.
      */
     public function store(Request $request): JsonResponse

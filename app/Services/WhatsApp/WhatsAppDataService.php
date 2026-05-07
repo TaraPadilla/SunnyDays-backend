@@ -4,24 +4,29 @@ namespace App\Services\WhatsApp;
 
 use App\Http\Controllers\InmuebleController;
 use App\Http\Controllers\CategoriaController;
+use App\Http\Controllers\SubcategoriaController;
 use App\Models\Inmueble;
 use App\Models\Categoria;
 use App\Models\Subcategoria;
 use App\Http\Resources\InmuebleResource;
 use App\Http\Resources\CategoriaResource;
+use App\Http\Resources\SubcategoriaResource;
 use Illuminate\Support\Facades\Log;
 
 class WhatsAppDataService
 {
     protected $inmuebleController;
     protected $categoriaController;
+    protected $subcategoriaController;
 
     public function __construct(
         InmuebleController $inmuebleController,
-        CategoriaController $categoriaController
+        CategoriaController $categoriaController,
+        SubcategoriaController $subcategoriaController
     ) {
         $this->inmuebleController = $inmuebleController;
         $this->categoriaController = $categoriaController;
+        $this->subcategoriaController = $subcategoriaController;
     }
 
     /**
@@ -64,13 +69,16 @@ class WhatsAppDataService
     }
 
     /**
-     * Obtener categorías activas por tipo para mostrar en WhatsApp usando el controller existente
+     * Obtener categorías activas para mostrar en WhatsApp usando el controller existente
      */
-    public function getActiveCategoriesByType(string $tipo): array
+    public function getActiveCategoriesByType(string $tipo = 'Egreso'): array
     {
         try {
-            // Usar la lógica del CategoriaController existente
-            $response = $this->categoriaController->index();
+            // Crear un request simulado para el nuevo método
+            $request = new \Illuminate\Http\Request();
+            
+            // Usar el nuevo método específico getByTipo
+            $response = $this->categoriaController->getByTipo($request, $tipo);
             $categoriasData = $response->getData(true);
             
             if ($categoriasData['status'] !== 'success') {
@@ -80,10 +88,10 @@ class WhatsAppDataService
                 return [];
             }
 
-            // Filtrar por tipo y extraer solo el nombre para WhatsApp
+            // Filtrar por visible_combo (el controller ya filtra por tipo y estado)
             $categories = collect($categoriasData['data'])
-                ->filter(function ($categoria) use ($tipo) {
-                    return $categoria['tipo'] === $tipo;
+                ->filter(function ($categoria) {
+                    return $categoria['visible_combo'] === true;
                 })
                 ->sortBy('orden')
                 ->sortBy('nombre')
@@ -97,14 +105,15 @@ class WhatsAppDataService
                 ->values()
                 ->toArray();
 
-            Log::info('WhatsApp Data Service - Categorías obtenidas via controller', [
+            Log::info('WhatsApp Data Service - Categorías obtenidas via controller (getByTipo)', [
                 'tipo' => $tipo,
-                'total' => count($categories)
+                'total' => count($categories),
+                'filtered_by' => 'tipo and visible_combo'
             ]);
 
             return $categories;
         } catch (\Exception $e) {
-            Log::error('WhatsApp Data Service - Error al obtener categorías via controller', [
+            Log::error('WhatsApp Data Service - Error al obtener categorías via controller (getByTipo)', [
                 'tipo' => $tipo,
                 'error' => $e->getMessage()
             ]);
@@ -113,32 +122,51 @@ class WhatsAppDataService
     }
 
     /**
-     * Obtener subcategorías activas por categoría para mostrar en WhatsApp
+     * Obtener subcategorías activas por categoría para mostrar en WhatsApp usando el controller existente
      */
     public function getActiveSubcategoriesByCategory(int $categoriaId): array
     {
         try {
-            $subcategorias = Subcategoria::where('categoria_id', $categoriaId)
-                ->where('estado', true)
-                ->where('visible_combo', true)
-                ->orderBy('orden')
-                ->orderBy('nombre')
-                ->get(['id', 'nombre']);
+            // Crear un request simulado para el nuevo método
+            $request = new \Illuminate\Http\Request();
+            
+            // Usar el nuevo método específico getByCategoria
+            $response = $this->subcategoriaController->getByCategoria($request, $categoriaId);
+            $subcategoriasData = $response->getData(true);
+            
+            if ($subcategoriasData['status'] !== 'success') {
+                Log::error('WhatsApp Data Service - Error del controller de subcategorías', [
+                    'error' => $subcategoriasData['message'] ?? 'Error desconocido'
+                ]);
+                return [];
+            }
 
-            Log::info('WhatsApp Data Service - Subcategorías obtenidas', [
+            // Filtrar por visible_combo (el controller ya filtra por categoría_id y estado)
+            $subcategories = collect($subcategoriasData['data'])
+                ->filter(function ($subcategoria) {
+                    return $subcategoria['visible_combo'] === true;
+                })
+                ->sortBy('orden')
+                ->sortBy('nombre')
+                ->map(function ($subcategoria) {
+                    return [
+                        'id' => "SUBCATEGORY_{$subcategoria['id']}",
+                        'title' => $subcategoria['nombre'],
+                        'description' => null
+                    ];
+                })
+                ->values()
+                ->toArray();
+
+            Log::info('WhatsApp Data Service - Subcategorías obtenidas via controller (getByCategoria)', [
                 'categoria_id' => $categoriaId,
-                'total' => $subcategorias->count()
+                'total' => count($subcategories),
+                'filtered_by' => 'categoria_id and visible_combo'
             ]);
 
-            return $subcategorias->map(function ($subcategoria) {
-                return [
-                    'id' => "SUBCATEGORY_{$subcategoria->id}",
-                    'title' => $subcategoria->nombre,
-                    'description' => null
-                ];
-            })->toArray();
+            return $subcategories;
         } catch (\Exception $e) {
-            Log::error('WhatsApp Data Service - Error al obtener subcategorías', [
+            Log::error('WhatsApp Data Service - Error al obtener subcategorías via controller (getByCategoria)', [
                 'categoria_id' => $categoriaId,
                 'error' => $e->getMessage()
             ]);

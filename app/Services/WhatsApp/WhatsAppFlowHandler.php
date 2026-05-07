@@ -127,9 +127,9 @@ class WhatsAppFlowHandler
         $confirmationMessage = "✅ Inmueble seleccionado: {$property->nombre}";
         $this->messageService->sendText($from, $confirmationMessage);
         
-        // Enviar listado de categorías (tipo 'Egreso' para gastos)
+        // Enviar listado de categorías (filtrado por tipo Egreso)
         $categories = $this->dataService->getActiveCategoriesByType('Egreso');
-        $this->listService->sendCategoryList($from, $categories, 'Egreso');
+        $this->listService->sendCategoryList($from, $categories, 'Gastos');
     }
 
     /**
@@ -304,9 +304,9 @@ class WhatsAppFlowHandler
                 break;
                 
             case 'SELECTING_CATEGORY':
-                // Enviar listado de categorías (tipo 'Egreso' para gastos)
+                // Enviar listado de categorías (filtrado por tipo Egreso)
                 $categories = $this->dataService->getActiveCategoriesByType('Egreso');
-                $this->listService->sendCategoryList($from, $categories, 'Egreso');
+                $this->listService->sendCategoryList($from, $categories, 'Gastos');
                 break;
                 
             case 'SELECTING_SUBCATEGORY':
@@ -317,7 +317,7 @@ class WhatsAppFlowHandler
                 } else {
                     // Si no hay categoría, regresar a selección de categoría
                     $categories = $this->dataService->getActiveCategoriesByType('Egreso');
-                    $this->listService->sendCategoryList($from, $categories, 'Egreso');
+                    $this->listService->sendCategoryList($from, $categories, 'Gastos');
                     $session->update(['estado_actual' => 'SELECTING_CATEGORY']);
                 }
                 break;

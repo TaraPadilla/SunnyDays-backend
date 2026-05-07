@@ -61,6 +61,64 @@ class CategoriaController extends Controller
     }
 
     /**
+     * Get categories by type.
+     */
+    public function getByTipo(Request $request, string $tipo): JsonResponse
+    {
+        Log::info('[CategoriaController] getByTipo: petición recibida', [
+            'tipo' => $tipo
+        ]);
+        
+        try {
+            // Validar que el tipo sea válido
+            if (!in_array($tipo, ['Ingreso', 'Egreso'])) {
+                Log::warning('[CategoriaController] getByTipo: tipo inválido', [
+                    'tipo' => $tipo
+                ]);
+                
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Tipo de categoría inválido. Debe ser Ingreso o Egreso'
+                ], 400);
+            }
+            
+            $query = Categoria::where('tipo', $tipo)
+                ->where('estado', true)
+                ->with(['campo', 'subcategorias' => function($query) {
+                    $query->where('estado', true)->orderBy('orden');
+                }])
+                ->orderBy('orden')
+                ->orderBy('nombre');
+            
+            $categorias = $query->get();
+            
+            Log::info('[CategoriaController] getByTipo: éxito', [
+                'tipo' => $tipo,
+                'total' => $categorias->count()
+            ]);
+            
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Categorías obtenidas correctamente',
+                'data' => CategoriaResource::collection($categorias)
+            ], 200);
+        } catch (\Exception $e) {
+            Log::error('[CategoriaController] getByTipo: excepción', [
+                'tipo' => $tipo,
+                'message' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine()
+            ]);
+            
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Error al obtener categorías',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
      * Store a newly created categoria in storage.
      */
     public function store(Request $request): JsonResponse
