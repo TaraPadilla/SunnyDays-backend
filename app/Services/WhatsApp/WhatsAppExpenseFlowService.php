@@ -99,6 +99,13 @@ class WhatsAppExpenseFlowService
                 $this->flowHandler->handleVATSelection($from, $buttonId, $activeSession);
                 break;
                 
+            case 'SELECTING_TOTAL_AMOUNT':
+                // En este estado no se pueden seleccionar opciones de IVA
+                $this->whatsAppMessageService->sendText($from, 
+                    '❌ Ya has seleccionado un monto de IVA. Por favor, confirma el monto total respondiendo SI o NO.'
+                );
+                break;
+                
             default:
                 Log::warning('WhatsApp Expense Flow - Botón recibido en estado no manejado', [
                     'from' => $from,

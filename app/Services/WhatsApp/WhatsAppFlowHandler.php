@@ -544,10 +544,16 @@ class WhatsAppFlowHandler
         $ivaAmount = $vatAmounts[$buttonId];
 
         if ($ivaAmount === null) {
-            // Pedir valor manual de IVA - mantenerse en SELECTING_VAT
-            $this->messageService->sendText($from, 
-                'Por favor, ingresa el monto del IVA (ej: 19000, 0):'
-            );
+            // Es VAT_OTRO, pedir valor manual inmediatamente
+            if ($buttonId === 'VAT_OTRO') {
+                $this->messageService->sendText($from, 
+                    'Por favor, ingresa el monto del IVA (ej: 19000, 0):'
+                );
+            } else {
+                $this->messageService->sendText($from, 
+                    '❌ Opción de IVA inválida. Por favor, selecciona una opción válida.'
+                );
+            }
             return;
         }
 
