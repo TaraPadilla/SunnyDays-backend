@@ -74,16 +74,15 @@ class WhatsAppWebhookController extends Controller
         $jsonError = json_last_error_msg();
 
         // Registrar información completa para debugging
-        Log::info('WhatsApp Webhook - Evento recibido', [
-            'headers' => $request->headers->all(),
-            'raw_body' => $rawBody,
-            'payload' => $payload,
+                        Log::info('WhatsApp Webhook - Evento recibido', [
+            'headers' => [
+                'content-type' => $request->header('Content-Type'),
+                'content-length' => $request->header('Content-Length'),
+                'user-agent' => $request->userAgent(),
+            ],
             'json_last_error_msg' => $jsonError,
             'json_last_error' => json_last_error(),
             'ip' => $request->ip(),
-            'user_agent' => $request->userAgent(),
-            'content_type' => $request->header('Content-Type'),
-            'content_length' => $request->header('Content-Length'),
         ]);
 
         // Detectar tipo de evento: mensajes vs status
@@ -118,9 +117,9 @@ class WhatsAppWebhookController extends Controller
                 $accessToken = env('WHATSAPP_ACCESS_TOKEN');
 
                 if ($phoneNumberId && $accessToken) {
-                    $endpoint = "https://graph.facebook.com/v22.0/{$phoneNumberId}/messages";
+                    $endpoint = "https://graph.facebook.com/v25.0/{$phoneNumberId}/messages";
                     
-                    $payload = [
+                    $outgoingPayload = [
                         'messaging_product' => 'whatsapp',
                         'to' => $from,
                         'type' => 'text',
@@ -135,7 +134,6 @@ class WhatsAppWebhookController extends Controller
 
                         Log::info('WhatsApp Webhook - Respuesta enviada', [
                             'to' => $from,
-                            'request_payload' => $payload,
                             'response_status' => $response->status(),
                             'response_body' => $response->body(),
                         ]);
