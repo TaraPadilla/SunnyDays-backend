@@ -46,11 +46,15 @@ class WhatsAppDataService
                 return [];
             }
 
-            // Extraer solo el nombre del inmueble para WhatsApp
+            // Extraer solo el nombre del inmueble para WhatsApp (truncado a 20 chars)
             $properties = collect($inmueblesData['data'])->map(function ($inmueble) {
+                $title = $inmueble['nombre'];
+                if (strlen($title) > 20) {
+                    $title = substr($title, 0, 17) . '...';
+                }
                 return [
                     'id' => "PROPERTY_{$inmueble['id']}",
-                    'title' => $inmueble['nombre'],
+                    'title' => $title,
                     'description' => null
                 ];
             })->toArray();
@@ -96,9 +100,13 @@ class WhatsAppDataService
                 ->sortBy('orden')
                 ->sortBy('nombre')
                 ->map(function ($categoria) {
+                    $title = $categoria['nombre'];
+                    if (strlen($title) > 20) {
+                        $title = substr($title, 0, 17) . '...';
+                    }
                     return [
                         'id' => "CATEGORY_{$categoria['id']}",
-                        'title' => $categoria['nombre'],
+                        'title' => $title,
                         'description' => null
                     ];
                 })
@@ -149,9 +157,13 @@ class WhatsAppDataService
                 ->sortBy('orden')
                 ->sortBy('nombre')
                 ->map(function ($subcategoria) {
+                    $title = $subcategoria['nombre'];
+                    if (strlen($title) > 20) {
+                        $title = substr($title, 0, 17) . '...';
+                    }
                     return [
                         'id' => "SUBCATEGORY_{$subcategoria['id']}",
-                        'title' => $subcategoria['nombre'],
+                        'title' => $title,
                         'description' => null
                     ];
                 })
