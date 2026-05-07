@@ -59,16 +59,15 @@ class WhatsAppFlowHandler
             $this->listService->sendPropertyList($from, $properties);
             
         } elseif ($buttonId === 'OTHER_DATE') {
-            // Pedir fecha específica
-            $session->update(['estado_actual' => 'SELECTING_DATE_MANUAL']);
-
+            // Pedir fecha específica - mantenerse en SELECTING_DATE
             Log::info('WhatsApp Flow Handler - Solicitando fecha manual', [
                 'from' => $from,
                 'session_id' => $session->id,
             ]);
 
-            $message = "Por favor, escribe la fecha del gasto en formato DD/MM/AAAA\n\nEjemplo: 25/12/2023";
-            $this->messageService->sendText($from, $message);
+            $this->messageService->sendText($from, 
+                '📅 Por favor, ingresa la fecha del gasto (formato: DD/MM/YYYY o YYYY-MM-DD):'
+            );
             
         } else {
             Log::warning('WhatsApp Flow Handler - Botón de fecha no reconocido', [
@@ -291,12 +290,6 @@ class WhatsAppFlowHandler
                 $this->sendInitialMessage($from);
                 break;
                 
-            case 'SELECTING_DATE_MANUAL':
-                // Reenviar solicitud de fecha manual
-                $message = "Por favor, escribe la fecha del gasto en formato DD/MM/AAAA\n\nEjemplo: 25/12/2023";
-                $this->messageService->sendText($from, $message);
-                break;
-                
             case 'SELECTING_PROPERTY':
                 // Enviar listado de inmuebles
                 $properties = $this->dataService->getActiveProperties();
@@ -455,7 +448,7 @@ class WhatsAppFlowHandler
      */
     public function handleAmountInput(string $from, string $message, WhatsAppSession $session): void
     {
-        if ($session->estado_actual !== 'SELECTING_AMOUNT') {
+        if ($session->estado_actual !== 'SELECTING_AMOUNT_WITHOUT_VAT') {
             Log::warning('WhatsApp Flow Handler - Monto recibido en estado incorrecto', [
                 'from' => $from,
                 'message' => $message,
@@ -552,8 +545,7 @@ class WhatsAppFlowHandler
         $vatRate = $vatRates[$buttonId];
 
         if ($vatRate === null) {
-            // Pedir valor manual de IVA
-            $session->update(['estado_actual' => 'SELECTING_VAT_MANUAL']);
+            // Pedir valor manual de IVA - mantenerse en SELECTING_VAT
             $this->messageService->sendText($from, 
                 'Por favor, ingresa el porcentaje de IVA (ej: 19, 0, 5):'
             );
@@ -604,22 +596,13 @@ class WhatsAppFlowHandler
         $confirmation = strtoupper(trim($message));
         
         if ($confirmation === 'SI' || $confirmation === 'S') {
-            // Confirmado, pasar a observaciones
-            $session->update(['estado_actual' => 'SELECTING_OBSERVATIONS']);
+            // Confirmado, pasar a monto sin IVA
+            $session->update(['estado_actual' => 'SELECTING_AMOUNT_WITHOUT_VAT']);
             
             $this->messageService->sendText($from, 
-                '✅ Monto total confirmado\n\n' .
-                'Por favor, ingresa alguna observación o escribe "NO" si no hay:'
+                '✅ Fecha confirmada\n\n' .
+                'Por favor, ingresa el monto sin IVA (ej: 15000, 250.50):'
             );
-        } elseif ($confirmation === 'NO' || $confirmation === 'N') {
-            // No confirmado, regresar a IVA
-            $session->update([
-                'iva' => null,
-                'monto_total' => null,
-                'estado_actual' => 'SELECTING_VAT'
-            ]);
-            
-            $this->sendVATOptions($from);
         } else {
             $this->messageService->sendText($from, 
                 '❌ Respuesta inválida. Por favor, responde SI o NO:'

@@ -95,6 +95,10 @@ class WhatsAppExpenseFlowService
                 $this->flowHandler->handleSubcategorySelection($from, $buttonId, $activeSession);
                 break;
                 
+            case 'SELECTING_VAT':
+                $this->flowHandler->handleVATSelection($from, $buttonId, $activeSession);
+                break;
+                
             default:
                 Log::warning('WhatsApp Expense Flow - Botón recibido en estado no manejado', [
                     'from' => $from,
@@ -157,15 +161,27 @@ class WhatsAppExpenseFlowService
                 // Actualizar timestamp y manejar según estado
                 $existingSession->update(['ultimo_mensaje_at' => Carbon::now()]);
                 
-                if ($existingSession->estado_actual === 'SELECTING_DATE_MANUAL') {
-                    // Manejar entrada manual de fecha
-                    $this->flowHandler->handleManualDateInput($from, $messageText, $existingSession);
+                if ($existingSession->estado_actual === 'SELECTING_DATE') {
+                    // Manejar entrada de fecha (puede ser por botones o texto)
+                    if (!is_numeric($messageText) && strlen($messageText) > 2) {
+                        // Es texto largo, probablemente una fecha manual
+                        $this->flowHandler->handleManualDateInput($from, $messageText, $existingSession);
+                    } else {
+                        // No es fecha, enviar opciones de fecha
+                        $this->flowHandler->sendNextStepMessage($from, $existingSession);
+                    }
                 } elseif ($existingSession->estado_actual === 'SELECTING_AMOUNT_WITHOUT_VAT') {
                     // Manejar entrada de monto sin IVA
                     $this->flowHandler->handleAmountInput($from, $messageText, $existingSession);
-                } elseif ($existingSession->estado_actual === 'SELECTING_VAT_MANUAL') {
-                    // Manejar entrada manual de IVA
-                    $this->handleManualVATInput($from, $messageText, $existingSession);
+                } elseif ($existingSession->estado_actual === 'SELECTING_VAT') {
+                    // Manejar entrada de IVA (puede ser por botones o texto)
+                    if (is_numeric($messageText)) {
+                        // Es entrada numérica, procesar como IVA manual
+                        $this->handleManualVATInput($from, $messageText, $existingSession);
+                    } else {
+                        // No es numérico, enviar opciones de IVA
+                        $this->flowHandler->sendNextStepMessage($from, $existingSession);
+                    }
                 } elseif ($existingSession->estado_actual === 'SELECTING_TOTAL_AMOUNT') {
                     // Manejar confirmación de monto total
                     $this->flowHandler->handleTotalAmountConfirmation($from, $messageText, $existingSession);
