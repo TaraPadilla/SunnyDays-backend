@@ -240,7 +240,7 @@ class WhatsAppListService
             }, $chunk);
 
             $sections[] = [
-                'title' => count($chunks) > 1 ? "Subcategorías " . ($index + 1) : "Subcategorías disponibles",
+                'title' => count($chunks) > 1 ? "Subcats " . ($index + 1) : "Subcategorías",
                 'rows' => $rows
             ];
         }
