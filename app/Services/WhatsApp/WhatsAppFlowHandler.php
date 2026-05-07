@@ -387,7 +387,15 @@ class WhatsAppFlowHandler
                 'to' => $to,
             ]);
         }
+    }
 
+    /**
+     * Parse date from text input
+     */
+    private function parseDateFromText(string $text): ?\Carbon\Carbon
+    {
+        $cleanText = trim($text);
+        
         // Formatos de fecha para parsear
         $formats = [
             'd/m/Y',    // 25/12/2023
