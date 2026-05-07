@@ -243,63 +243,24 @@ class WhatsAppListService
                 'title' => count($chunks) > 1 ? "Subcategorías " . ($index + 1) : "Subcategorías disponibles",
                 'rows' => $rows
             ];
-    }
-}
+        }
 
-/**
- * Enviar subcategorías como lista
- */
-private function sendSubcategoryAsList(string $to, array $subcategories): void
-{
-    $sections = [];
-    $chunks = array_chunk($subcategories, 10);
+        $body = "📝 Selecciona la subcategoría del gasto";
+        $buttonText = "Ver subcategorías";
 
-    foreach ($chunks as $index => $chunk) {
-        $rows = array_map(function ($subcategory) {
-            return [
-                'id' => $subcategory['id'],
-                'title' => $subcategory['title'],
-                'description' => $subcategory['description'] ?? ''
-            ];
-        }, $chunk);
+        $response = $this->whatsAppMessageService->sendList($to, $body, $buttonText, $sections);
 
-        $sections[] = [
-            'title' => count($chunks) > 1 ? "Subcategorías " . ($index + 1) : "Subcategorías disponibles",
-            'rows' => $rows
-        ];
-    }
-
-    $body = "📝 Selecciona la subcategoría del gasto";
-    $buttonText = "Ver subcategorías";
-
-    Log::info('WhatsApp List Service - Enviando lista de subcategorías', [
-        'to' => $to,
-        'subcategories_count' => count($subcategories),
-        'sections_count' => count($sections),
-        'method' => 'sendList'
-    ]);
-
-    $response = $this->whatsAppMessageService->sendList($to, $body, $buttonText, $sections);
-
-    Log::info('WhatsApp List Service - Respuesta de WhatsApp API', [
-        'to' => $to,
-        'response_status' => $response ? $response['status'] : 'null',
-        'response_body' => $response ? json_encode($response) : 'null',
-        'http_status' => $response ? ($response['status'] ?? 'unknown') : 'no_response'
-    ]);
-
-    if ($response) {
-        Log::info('WhatsApp List Service - Lista de subcategorías enviada exitosamente', [
-            'to' => $to,
-            'subcategories_count' => count($subcategories),
-            'sections_count' => count($sections),
-            'response_status' => $response['status'],
-        ]);
-    } else {
-        Log::error('WhatsApp List Service - Error al enviar lista de subcategorías', [
-            'to' => $to,
-            'error_details' => 'No response from WhatsApp API',
-            'http_status' => 'no_response'
-        ]);
+        if ($response) {
+            Log::info('WhatsApp List Service - Lista de subcategorías enviada', [
+                'to' => $to,
+                'subcategories_count' => count($subcategories),
+                'sections_count' => count($sections),
+                'response_status' => $response['status'],
+            ]);
+        } else {
+            Log::error('WhatsApp List Service - Error al enviar lista de subcategorías', [
+                'to' => $to,
+            ]);
+        }
     }
 }
