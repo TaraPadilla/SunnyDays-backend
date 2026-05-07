@@ -25,14 +25,14 @@ class WhatsAppListService
             return;
         }
 
-        // Si hay muchos inmuebles, enviar como lista en lugar de botones
-        if (count($properties) > 10) {
+        // Si hay más de 3 inmuebles, enviar como lista (límite de WhatsApp)
+        if (count($properties) > 3) {
             $this->sendPropertyAsList($to, $properties);
             return;
         }
 
-        // Enviar como botones si son pocos
-        $buttons = array_slice($properties, 0, 3); // Máximo 3 botones por mensaje
+        // Enviar como botones si son 3 o menos
+        $buttons = array_slice($properties, 0, 3); // Máximo 3 botones por mensaje (límite WhatsApp)
         
         $body = "🏢 Selecciona el inmueble donde registraste el gasto:\n\n" .
                 "*Puedes escribir CANCELAR en cualquier momento para cancelar el proceso*";
@@ -107,14 +107,14 @@ class WhatsAppListService
             return;
         }
 
-        // Si hay muchas categorías, enviar como lista
-        if (count($categories) > 10) {
+        // Si hay más de 3 categorías, enviar como lista (límite de WhatsApp)
+        if (count($categories) > 3) {
             $this->sendCategoryAsList($to, $categories, $tipo);
             return;
         }
 
-        // Enviar como botones si son pocas
-        $buttons = array_slice($categories, 0, 3);
+        // Enviar como botones si son 3 o menos
+        $buttons = array_slice($categories, 0, 3); // Máximo 3 botones por mensaje (límite WhatsApp)
         
         $body = "📋 Selecciona la categoría del gasto:\n\n" .
                 "*Tipo: " . ucfirst($tipo) . "*\n\n" .
@@ -194,14 +194,14 @@ class WhatsAppListService
             return;
         }
 
-        // Si hay muchas subcategorías, enviar como lista
-        if (count($subcategories) > 10) {
+        // Si hay más de 3 subcategorías, enviar como lista (límite de WhatsApp)
+        if (count($subcategories) > 3) {
             $this->sendSubcategoryAsList($to, $subcategories);
             return;
         }
 
-        // Enviar como botones si son pocas
-        $buttons = array_slice($subcategories, 0, 3);
+        // Enviar como botones si son 3 o menos
+        $buttons = array_slice($subcategories, 0, 3); // Máximo 3 botones por mensaje (límite WhatsApp)
         
         $body = "📝 Selecciona la subcategoría del gasto:\n\n" .
                 "*Puedes escribir CANCELAR en cualquier momento para cancelar el proceso*";
