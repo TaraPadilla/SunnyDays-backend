@@ -5,10 +5,17 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Log;
+use App\Services\WhatsApp\WhatsAppMessageService;
 use Illuminate\Support\Facades\Http;
 
 class WhatsAppWebhookController extends Controller
 {
+    protected $whatsAppMessageService;
+
+    public function __construct(WhatsAppMessageService $whatsAppMessageService)
+    {
+        $this->whatsAppMessageService = $whatsAppMessageService;
+    }
     /**
      * Verificación del webhook de WhatsApp Cloud API
      * Meta requiere este endpoint para verificar la URL del webhook
@@ -113,42 +120,7 @@ class WhatsAppWebhookController extends Controller
 
             // Enviar respuesta automática solo si es mensaje de texto y tiene remitente
             if ($from && $messageType === 'text') {
-                $phoneNumberId = env('WHATSAPP_PHONE_NUMBER_ID');
-                $accessToken = env('WHATSAPP_ACCESS_TOKEN');
-
-                if ($phoneNumberId && $accessToken) {
-                    $endpoint = "https://graph.facebook.com/v25.0/{$phoneNumberId}/messages";
-                    
-                    $outgoingPayload = [
-                        'messaging_product' => 'whatsapp',
-                        'to' => $from,
-                        'type' => 'text',
-                        'text' => [
-                            'body' => 'Hola, recibimos tu mensaje.'
-                        ]
-                    ];
-
-                    try {
-                        $response = Http::withToken($accessToken)
-                            ->post($endpoint, $payload);
-
-                        Log::info('WhatsApp Webhook - Respuesta enviada', [
-                            'to' => $from,
-                            'response_status' => $response->status(),
-                            'response_body' => $response->body(),
-                        ]);
-                    } catch (\Exception $e) {
-                        Log::error('WhatsApp Webhook - Error al enviar respuesta', [
-                            'to' => $from,
-                            'error' => $e->getMessage(),
-                        ]);
-                    }
-                } else {
-                    Log::warning('WhatsApp Webhook - Configuración incompleta para enviar respuesta', [
-                        'phone_number_id_configured' => !empty($phoneNumberId),
-                        'access_token_configured' => !empty($accessToken),
-                    ]);
-                }
+                $this->whatsAppMessageService->sendText($from, 'Aqui nueva arquitectura.');
             }
         } elseif ($hasStatuses) {
             Log::info('WhatsApp Webhook - Status update detectado');
