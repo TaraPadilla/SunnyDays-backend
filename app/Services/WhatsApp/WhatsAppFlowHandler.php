@@ -6,6 +6,8 @@ use App\Models\WhatsAppSession;
 use App\Models\Inmueble;
 use App\Models\Categoria;
 use App\Models\Subcategoria;
+use App\Http\Controllers\InmuebleController;
+use App\Http\Controllers\CategoriaController;
 use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
 
@@ -125,9 +127,9 @@ class WhatsAppFlowHandler
         $confirmationMessage = "✅ Inmueble seleccionado: {$property->nombre}";
         $this->messageService->sendText($from, $confirmationMessage);
         
-        // Enviar listado de categorías (asumimos tipo 'gasto' por ahora)
-        $categories = $this->dataService->getActiveCategoriesByType('gasto');
-        $this->listService->sendCategoryList($from, $categories, 'gasto');
+        // Enviar listado de categorías (tipo 'Egreso' para gastos)
+        $categories = $this->dataService->getActiveCategoriesByType('Egreso');
+        $this->listService->sendCategoryList($from, $categories, 'Egreso');
     }
 
     /**
@@ -302,9 +304,9 @@ class WhatsAppFlowHandler
                 break;
                 
             case 'SELECTING_CATEGORY':
-                // Enviar listado de categorías (asumimos tipo 'gasto')
-                $categories = $this->dataService->getActiveCategoriesByType('gasto');
-                $this->listService->sendCategoryList($from, $categories, 'gasto');
+                // Enviar listado de categorías (tipo 'Egreso' para gastos)
+                $categories = $this->dataService->getActiveCategoriesByType('Egreso');
+                $this->listService->sendCategoryList($from, $categories, 'Egreso');
                 break;
                 
             case 'SELECTING_SUBCATEGORY':
@@ -314,8 +316,8 @@ class WhatsAppFlowHandler
                     $this->listService->sendSubcategoryList($from, $subcategories);
                 } else {
                     // Si no hay categoría, regresar a selección de categoría
-                    $categories = $this->dataService->getActiveCategoriesByType('gasto');
-                    $this->listService->sendCategoryList($from, $categories, 'gasto');
+                    $categories = $this->dataService->getActiveCategoriesByType('Egreso');
+                    $this->listService->sendCategoryList($from, $categories, 'Egreso');
                     $session->update(['estado_actual' => 'SELECTING_CATEGORY']);
                 }
                 break;

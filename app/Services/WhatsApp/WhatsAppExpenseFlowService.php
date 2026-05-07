@@ -3,6 +3,8 @@
 namespace App\Services\WhatsApp;
 
 use App\Models\WhatsAppSession;
+use App\Http\Controllers\InmuebleController;
+use App\Http\Controllers\CategoriaController;
 use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
 
@@ -13,7 +15,9 @@ class WhatsAppExpenseFlowService
 
     public function __construct(
         WhatsAppMessageService $whatsAppMessageService,
-        WhatsAppFlowHandler $flowHandler
+        WhatsAppFlowHandler $flowHandler,
+        InmuebleController $inmuebleController,
+        CategoriaController $categoriaController
     ) {
         $this->whatsAppMessageService = $whatsAppMessageService;
         $this->flowHandler = $flowHandler;

@@ -2,36 +2,61 @@
 
 namespace App\Services\WhatsApp;
 
+use App\Http\Controllers\InmuebleController;
+use App\Http\Controllers\CategoriaController;
 use App\Models\Inmueble;
 use App\Models\Categoria;
 use App\Models\Subcategoria;
+use App\Http\Resources\InmuebleResource;
+use App\Http\Resources\CategoriaResource;
 use Illuminate\Support\Facades\Log;
 
 class WhatsAppDataService
 {
+    protected $inmuebleController;
+    protected $categoriaController;
+
+    public function __construct(
+        InmuebleController $inmuebleController,
+        CategoriaController $categoriaController
+    ) {
+        $this->inmuebleController = $inmuebleController;
+        $this->categoriaController = $categoriaController;
+    }
+
     /**
-     * Obtener inmuebles activos para mostrar en WhatsApp
+     * Obtener inmuebles activos para mostrar en WhatsApp usando el controller existente
      */
     public function getActiveProperties(): array
     {
         try {
-            $inmuebles = Inmueble::where('estado', true)
-                ->orderBy('nombre')
-                ->get(['id', 'nombre', 'codigo']);
+            // Usar la lógica del InmuebleController existente
+            $response = $this->inmuebleController->index();
+            $inmueblesData = $response->getData(true);
+            
+            if ($inmueblesData['status'] !== 'success') {
+                Log::error('WhatsApp Data Service - Error del controller', [
+                    'error' => $inmueblesData['message'] ?? 'Error desconocido'
+                ]);
+                return [];
+            }
 
-            Log::info('WhatsApp Data Service - Inmuebles obtenidos', [
-                'total' => $inmuebles->count()
-            ]);
-
-            return $inmuebles->map(function ($inmueble) {
+            // Extraer solo el nombre del inmueble para WhatsApp
+            $properties = collect($inmueblesData['data'])->map(function ($inmueble) {
                 return [
-                    'id' => "PROPERTY_{$inmueble->id}",
-                    'title' => $inmueble->nombre,
-                    'description' => $inmueble->codigo ? "Código: {$inmueble->codigo}" : null
+                    'id' => "PROPERTY_{$inmueble['id']}",
+                    'title' => $inmueble['nombre'],
+                    'description' => null
                 ];
             })->toArray();
+
+            Log::info('WhatsApp Data Service - Inmuebles obtenidos via controller', [
+                'total' => count($properties)
+            ]);
+
+            return $properties;
         } catch (\Exception $e) {
-            Log::error('WhatsApp Data Service - Error al obtener inmuebles', [
+            Log::error('WhatsApp Data Service - Error al obtener inmuebles via controller', [
                 'error' => $e->getMessage()
             ]);
             return [];
@@ -39,32 +64,47 @@ class WhatsAppDataService
     }
 
     /**
-     * Obtener categorías activas por tipo para mostrar en WhatsApp
+     * Obtener categorías activas por tipo para mostrar en WhatsApp usando el controller existente
      */
     public function getActiveCategoriesByType(string $tipo): array
     {
         try {
-            $categorias = Categoria::where('tipo', $tipo)
-                ->where('estado', true)
-                ->where('visible_combo', true)
-                ->orderBy('orden')
-                ->orderBy('nombre')
-                ->get(['id', 'nombre']);
+            // Usar la lógica del CategoriaController existente
+            $response = $this->categoriaController->index();
+            $categoriasData = $response->getData(true);
+            
+            if ($categoriasData['status'] !== 'success') {
+                Log::error('WhatsApp Data Service - Error del controller de categorías', [
+                    'error' => $categoriasData['message'] ?? 'Error desconocido'
+                ]);
+                return [];
+            }
 
-            Log::info('WhatsApp Data Service - Categorías obtenidas', [
+            // Filtrar por tipo y extraer solo el nombre para WhatsApp
+            $categories = collect($categoriasData['data'])
+                ->filter(function ($categoria) use ($tipo) {
+                    return $categoria['tipo'] === $tipo;
+                })
+                ->sortBy('orden')
+                ->sortBy('nombre')
+                ->map(function ($categoria) {
+                    return [
+                        'id' => "CATEGORY_{$categoria['id']}",
+                        'title' => $categoria['nombre'],
+                        'description' => null
+                    ];
+                })
+                ->values()
+                ->toArray();
+
+            Log::info('WhatsApp Data Service - Categorías obtenidas via controller', [
                 'tipo' => $tipo,
-                'total' => $categorias->count()
+                'total' => count($categories)
             ]);
 
-            return $categorias->map(function ($categoria) {
-                return [
-                    'id' => "CATEGORY_{$categoria->id}",
-                    'title' => $categoria->nombre,
-                    'description' => null
-                ];
-            })->toArray();
+            return $categories;
         } catch (\Exception $e) {
-            Log::error('WhatsApp Data Service - Error al obtener categorías', [
+            Log::error('WhatsApp Data Service - Error al obtener categorías via controller', [
                 'tipo' => $tipo,
                 'error' => $e->getMessage()
             ]);
