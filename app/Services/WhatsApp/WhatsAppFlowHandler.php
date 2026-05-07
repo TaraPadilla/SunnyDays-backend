@@ -467,9 +467,23 @@ class WhatsAppFlowHandler
         }
 
         // Guardar monto en la sesión
+        Log::info('WhatsApp Flow Handler - Actualizando estado a SELECTING_VAT', [
+            'from' => $from,
+            'session_id' => $session->id,
+            'monto_sin_iva' => $amount,
+            'estado_anterior' => $session->estado_actual,
+            'estado_nuevo' => 'SELECTING_VAT'
+        ]);
+        
         $session->update([
             'monto_sin_iva' => $amount,
             'estado_actual' => 'SELECTING_VAT',
+        ]);
+
+        Log::info('WhatsApp Flow Handler - Estado actualizado', [
+            'from' => $from,
+            'session_id' => $session->id,
+            'estado_actual' => $session->fresh()->estado_actual
         ]);
 
         Log::info('WhatsApp Flow Handler - Monto ingresado', [
@@ -570,13 +584,12 @@ class WhatsAppFlowHandler
         Log::info('WhatsApp Flow Handler - IVA seleccionado', [
             'from' => $from,
             'session_id' => $session->id,
-            'vat_rate' => $vatRate,
             'iva_amount' => $ivaAmount,
             'total_amount' => $montoTotal,
         ]);
 
         // Enviar confirmación y solicitar confirmación del total
-        $confirmationMessage = "✅ IVA ({$vatRate}%): $" . number_format($ivaAmount, 2, ',', '.') . "\n\n" .
+        $confirmationMessage = "✅ IVA: $" . number_format($ivaAmount, 2, ',', '.') . "\n\n" .
                                "💰 *Monto total: $" . number_format($montoTotal, 2, ',', '.') . "*\n\n" .
                                "¿Confirmas este monto total? Responde SI o NO:";
         $this->messageService->sendText($from, $confirmationMessage);
