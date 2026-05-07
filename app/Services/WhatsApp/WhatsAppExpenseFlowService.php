@@ -3,6 +3,9 @@
 namespace App\Services\WhatsApp;
 
 use App\Models\WhatsAppSession;
+use App\Models\Inmueble;
+use App\Models\Categoria;
+use App\Models\Subcategoria;
 use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
 
@@ -111,8 +114,32 @@ class WhatsAppExpenseFlowService
         // Actualizar timestamp
         $activeSession->update(['ultimo_mensaje_at' => Carbon::now()]);
 
-        // Implementar lógica según el botón seleccionado
-        $this->handleDateSelection($from, $buttonId, $activeSession);
+        // Implementar lógica según el botón seleccionado y estado actual
+        switch ($activeSession->estado_actual) {
+            case 'SELECTING_DATE':
+                $this->handleDateSelection($from, $buttonId, $activeSession);
+                break;
+                
+            case 'SELECTING_PROPERTY':
+                $this->handlePropertySelection($from, $buttonId, $activeSession);
+                break;
+                
+            case 'SELECTING_CATEGORY':
+                $this->handleCategorySelection($from, $buttonId, $activeSession);
+                break;
+                
+            case 'SELECTING_SUBCATEGORY':
+                $this->handleSubcategorySelection($from, $buttonId, $activeSession);
+                break;
+                
+            default:
+                Log::warning('WhatsApp Expense Flow - Botón recibido en estado no manejado', [
+                    'from' => $from,
+                    'button_id' => $buttonId,
+                    'estado_actual' => $activeSession->estado_actual,
+                ]);
+                break;
+        }
     }
 
     /**
@@ -267,8 +294,8 @@ class WhatsAppExpenseFlowService
                 'fecha_gasto' => $session->fecha_gasto,
             ]);
 
-            // TODO: Enviar mensaje para seleccionar propiedad
-            $this->whatsAppMessageService->sendText($from, '✅ Fecha registrada: hoy\n\nAhora selecciona la propiedad del gasto...');
+            // Enviar listado de inmuebles para seleccionar
+            $this->sendPropertyList($from);
             
         } elseif ($buttonId === 'OTHER_DATE') {
             // Pedir fecha específica
@@ -288,6 +315,191 @@ class WhatsAppExpenseFlowService
                 'button_id' => $buttonId,
             ]);
         }
+    }
+
+    /**
+     * Handle property selection from buttons
+     */
+    private function handlePropertySelection(string $from, string $buttonId, WhatsAppSession $session): void
+    {
+        if ($session->estado_actual !== 'SELECTING_PROPERTY') {
+            Log::warning('WhatsApp Expense Flow - Botón de propiedad recibido en estado incorrecto', [
+                'from' => $from,
+                'button_id' => $buttonId,
+                'estado_actual' => $session->estado_actual,
+            ]);
+            return;
+        }
+
+        // Validar que el botón tenga el formato esperado
+        if (!str_starts_with($buttonId, 'PROPERTY_')) {
+            Log::warning('WhatsApp Expense Flow - Botón de propiedad con formato inválido', [
+                'from' => $from,
+                'button_id' => $buttonId,
+            ]);
+            return;
+        }
+
+        // Extraer ID del inmueble
+        $propertyId = str_replace('PROPERTY_', '', $buttonId);
+        
+        // Validar que el inmueble exista
+        $property = Inmueble::find($propertyId);
+        if (!$property) {
+            Log::warning('WhatsApp Expense Flow - Inmueble no encontrado', [
+                'from' => $from,
+                'property_id' => $propertyId,
+                'button_id' => $buttonId,
+            ]);
+            
+            $this->whatsAppMessageService->sendText($from, 
+                '❌ El inmueble seleccionado no existe. Por favor, selecciona una opción válida.'
+            );
+            return;
+        }
+
+        // Guardar inmueble en la sesión
+        $session->update([
+            'inmueble_id' => $propertyId,
+            'estado_actual' => 'SELECTING_CATEGORY',
+        ]);
+
+        Log::info('WhatsApp Expense Flow - Inmueble seleccionado', [
+            'from' => $from,
+            'session_id' => $session->id,
+            'property_id' => $propertyId,
+            'property_name' => $property->nombre,
+        ]);
+
+        // Enviar confirmación y listado de categorías
+        $confirmationMessage = "✅ Inmueble seleccionado: {$property->nombre}";
+        $this->whatsAppMessageService->sendText($from, $confirmationMessage);
+        
+        // Enviar listado de categorías (asumimos tipo 'gasto' por ahora)
+        $this->sendCategoryList($from, 'gasto');
+    }
+
+    /**
+     * Handle category selection from buttons
+     */
+    private function handleCategorySelection(string $from, string $buttonId, WhatsAppSession $session): void
+    {
+        if ($session->estado_actual !== 'SELECTING_CATEGORY') {
+            Log::warning('WhatsApp Expense Flow - Botón de categoría recibido en estado incorrecto', [
+                'from' => $from,
+                'button_id' => $buttonId,
+                'estado_actual' => $session->estado_actual,
+            ]);
+            return;
+        }
+
+        // Validar que el botón tenga el formato esperado
+        if (!str_starts_with($buttonId, 'CATEGORY_')) {
+            Log::warning('WhatsApp Expense Flow - Botón de categoría con formato inválido', [
+                'from' => $from,
+                'button_id' => $buttonId,
+            ]);
+            return;
+        }
+
+        // Extraer ID de la categoría
+        $categoryId = str_replace('CATEGORY_', '', $buttonId);
+        
+        // Validar que la categoría exista
+        $category = Categoria::find($categoryId);
+        if (!$category) {
+            Log::warning('WhatsApp Expense Flow - Categoría no encontrada', [
+                'from' => $from,
+                'category_id' => $categoryId,
+                'button_id' => $buttonId,
+            ]);
+            
+            $this->whatsAppMessageService->sendText($from, 
+                '❌ La categoría seleccionada no existe. Por favor, selecciona una opción válida.'
+            );
+            return;
+        }
+
+        // Guardar categoría en la sesión
+        $session->update([
+            'tipo_categoria_id' => $categoryId,
+            'estado_actual' => 'SELECTING_SUBCATEGORY',
+        ]);
+
+        Log::info('WhatsApp Expense Flow - Categoría seleccionada', [
+            'from' => $from,
+            'session_id' => $session->id,
+            'category_id' => $categoryId,
+            'category_name' => $category->nombre,
+            'category_type' => $category->tipo,
+        ]);
+
+        // Enviar confirmación y listado de subcategorías
+        $confirmationMessage = "✅ Categoría seleccionada: {$category->nombre}";
+        $this->whatsAppMessageService->sendText($from, $confirmationMessage);
+        
+        // Enviar listado de subcategorías
+        $this->sendSubcategoryList($from, $categoryId);
+    }
+
+    /**
+     * Handle subcategory selection from buttons
+     */
+    private function handleSubcategorySelection(string $from, string $buttonId, WhatsAppSession $session): void
+    {
+        if ($session->estado_actual !== 'SELECTING_SUBCATEGORY') {
+            Log::warning('WhatsApp Expense Flow - Botón de subcategoría recibido en estado incorrecto', [
+                'from' => $from,
+                'button_id' => $buttonId,
+                'estado_actual' => $session->estado_actual,
+            ]);
+            return;
+        }
+
+        // Validar que el botón tenga el formato esperado
+        if (!str_starts_with($buttonId, 'SUBCATEGORY_')) {
+            Log::warning('WhatsApp Expense Flow - Botón de subcategoría con formato inválido', [
+                'from' => $from,
+                'button_id' => $buttonId,
+            ]);
+            return;
+        }
+
+        // Extraer ID de la subcategoría
+        $subcategoryId = str_replace('SUBCATEGORY_', '', $buttonId);
+        
+        // Validar que la subcategoría exista
+        $subcategory = Subcategoria::find($subcategoryId);
+        if (!$subcategory) {
+            Log::warning('WhatsApp Expense Flow - Subcategoría no encontrada', [
+                'from' => $from,
+                'subcategory_id' => $subcategoryId,
+                'button_id' => $buttonId,
+            ]);
+            
+            $this->whatsAppMessageService->sendText($from, 
+                '❌ La subcategoría seleccionada no existe. Por favor, selecciona una opción válida.'
+            );
+            return;
+        }
+
+        // Guardar subcategoría en la sesión
+        $session->update([
+            'categoria_gasto_id' => $subcategoryId,
+            'estado_actual' => 'SELECTING_AMOUNT',
+        ]);
+
+        Log::info('WhatsApp Expense Flow - Subcategoría seleccionada', [
+            'from' => $from,
+            'session_id' => $session->id,
+            'subcategory_id' => $subcategoryId,
+            'subcategory_name' => $subcategory->nombre,
+        ]);
+
+        // Enviar confirmación y solicitar monto
+        $confirmationMessage = "✅ Subcategoría seleccionada: {$subcategory->nombre}\n\n" .
+                               "Ahora por favor, ingresa el monto del gasto (solo números):";
+        $this->whatsAppMessageService->sendText($from, $confirmationMessage);
     }
 
     /**
@@ -328,8 +540,12 @@ class WhatsAppExpenseFlowService
             'fecha_original' => $messageText,
         ]);
 
-        $successMessage = "✅ Fecha registrada: {$parsedDate->format('d/m/Y')}\n\nAhora selecciona la propiedad del gasto...";
+        // Enviar confirmación y listado de inmuebles
+        $successMessage = "✅ Fecha registrada: {$parsedDate->format('d/m/Y')}";
         $this->whatsAppMessageService->sendText($from, $successMessage);
+        
+        // Enviar listado de inmuebles para seleccionar
+        $this->sendPropertyList($from);
     }
 
     /**
@@ -467,8 +683,31 @@ class WhatsAppExpenseFlowService
                 break;
                 
             case 'SELECTING_PROPERTY':
-                // TODO: Enviar mensaje para seleccionar propiedad
-                $this->whatsAppMessageService->sendText($from, '✅ Continuemos...\n\nAhora selecciona la propiedad del gasto...');
+                // Enviar listado de inmuebles
+                $this->sendPropertyList($from);
+                break;
+                
+            case 'SELECTING_CATEGORY':
+                // Enviar listado de categorías (asumimos tipo 'gasto')
+                $this->sendCategoryList($from, 'gasto');
+                break;
+                
+            case 'SELECTING_SUBCATEGORY':
+                // Enviar listado de subcategorías si tenemos categoría seleccionada
+                if ($session->tipo_categoria_id) {
+                    $this->sendSubcategoryList($from, $session->tipo_categoria_id);
+                } else {
+                    // Si no hay categoría, regresar a selección de categoría
+                    $this->sendCategoryList($from, 'gasto');
+                    $session->update(['estado_actual' => 'SELECTING_CATEGORY']);
+                }
+                break;
+                
+            case 'SELECTING_AMOUNT':
+                // Solicitar monto del gasto
+                $this->whatsAppMessageService->sendText($from, 
+                    '💰 Por favor, ingresa el monto del gasto (solo números):'
+                );
                 break;
                 
             default:
@@ -480,6 +719,362 @@ class WhatsAppExpenseFlowService
                 $this->sendInitialMessage($from);
                 $session->update(['estado_actual' => 'SELECTING_DATE']);
                 break;
+        }
+    }
+
+    /**
+     * Obtener inmuebles activos para mostrar en WhatsApp
+     */
+    private function getActiveProperties(): array
+    {
+        try {
+            $inmuebles = Inmueble::where('estado', true)
+                ->orderBy('nombre')
+                ->get(['id', 'nombre', 'codigo']);
+
+            Log::info('WhatsApp Expense Flow - Inmuebles obtenidos', [
+                'total' => $inmuebles->count()
+            ]);
+
+            return $inmuebles->map(function ($inmueble) {
+                return [
+                    'id' => "PROPERTY_{$inmueble->id}",
+                    'title' => $inmueble->nombre,
+                    'description' => $inmueble->codigo ? "Código: {$inmueble->codigo}" : null
+                ];
+            })->toArray();
+        } catch (\Exception $e) {
+            Log::error('WhatsApp Expense Flow - Error al obtener inmuebles', [
+                'error' => $e->getMessage()
+            ]);
+            return [];
+        }
+    }
+
+    /**
+     * Obtener categorías activas por tipo para mostrar en WhatsApp
+     */
+    private function getActiveCategoriesByType(string $tipo): array
+    {
+        try {
+            $categorias = Categoria::where('tipo', $tipo)
+                ->where('estado', true)
+                ->where('visible_combo', true)
+                ->orderBy('orden')
+                ->orderBy('nombre')
+                ->get(['id', 'nombre']);
+
+            Log::info('WhatsApp Expense Flow - Categorías obtenidas', [
+                'tipo' => $tipo,
+                'total' => $categorias->count()
+            ]);
+
+            return $categorias->map(function ($categoria) {
+                return [
+                    'id' => "CATEGORY_{$categoria->id}",
+                    'title' => $categoria->nombre,
+                    'description' => null
+                ];
+            })->toArray();
+        } catch (\Exception $e) {
+            Log::error('WhatsApp Expense Flow - Error al obtener categorías', [
+                'tipo' => $tipo,
+                'error' => $e->getMessage()
+            ]);
+            return [];
+        }
+    }
+
+    /**
+     * Obtener subcategorías activas por categoría para mostrar en WhatsApp
+     */
+    private function getActiveSubcategoriesByCategory(int $categoriaId): array
+    {
+        try {
+            $subcategorias = Subcategoria::where('categoria_id', $categoriaId)
+                ->where('estado', true)
+                ->where('visible_combo', true)
+                ->orderBy('orden')
+                ->orderBy('nombre')
+                ->get(['id', 'nombre']);
+
+            Log::info('WhatsApp Expense Flow - Subcategorías obtenidas', [
+                'categoria_id' => $categoriaId,
+                'total' => $subcategorias->count()
+            ]);
+
+            return $subcategorias->map(function ($subcategoria) {
+                return [
+                    'id' => "SUBCATEGORY_{$subcategoria->id}",
+                    'title' => $subcategoria->nombre,
+                    'description' => null
+                ];
+            })->toArray();
+        } catch (\Exception $e) {
+            Log::error('WhatsApp Expense Flow - Error al obtener subcategorías', [
+                'categoria_id' => $categoriaId,
+                'error' => $e->getMessage()
+            ]);
+            return [];
+        }
+    }
+
+    /**
+     * Enviar listado de inmuebles como botones
+     */
+    private function sendPropertyList(string $to): void
+    {
+        $properties = $this->getActiveProperties();
+
+        if (empty($properties)) {
+            $this->whatsAppMessageService->sendText($to, 
+                '❌ No hay inmuebles disponibles en este momento. Por favor, contacta al administrador.'
+            );
+            return;
+        }
+
+        // Si hay muchos inmuebles, enviar como lista en lugar de botones
+        if (count($properties) > 10) {
+            $this->sendPropertyAsList($to, $properties);
+            return;
+        }
+
+        // Enviar como botones si son pocos
+        $buttons = array_slice($properties, 0, 3); // Máximo 3 botones por mensaje
+        
+        $body = "🏢 Selecciona el inmueble donde registraste el gasto:\n\n" .
+                "*Puedes escribir CANCELAR en cualquier momento para cancelar el proceso*";
+
+        $response = $this->whatsAppMessageService->sendButtons($to, $body, $buttons);
+
+        if ($response) {
+            Log::info('WhatsApp Expense Flow - Listado de inmuebles enviado', [
+                'to' => $to,
+                'properties_count' => count($properties),
+                'buttons_sent' => count($buttons),
+                'response_status' => $response['status'],
+            ]);
+        } else {
+            Log::error('WhatsApp Expense Flow - Error al enviar listado de inmuebles', [
+                'to' => $to,
+            ]);
+        }
+    }
+
+    /**
+     * Enviar inmuebles como lista (para más de 10 elementos)
+     */
+    private function sendPropertyAsList(string $to, array $properties): void
+    {
+        $sections = [];
+        $chunks = array_chunk($properties, 10); // Máximo 10 por sección
+
+        foreach ($chunks as $index => $chunk) {
+            $rows = array_map(function ($property) {
+                return [
+                    'id' => $property['id'],
+                    'title' => $property['title'],
+                    'description' => $property['description'] ?? ''
+                ];
+            }, $chunk);
+
+            $sections[] = [
+                'title' => count($chunks) > 1 ? "Inmuebles " . ($index + 1) : "Inmuebles disponibles",
+                'rows' => $rows
+            ];
+        }
+
+        $body = "🏢 Selecciona el inmueble donde registraste el gasto";
+        $buttonText = "Ver inmuebles";
+
+        $response = $this->whatsAppMessageService->sendList($to, $body, $buttonText, $sections);
+
+        if ($response) {
+            Log::info('WhatsApp Expense Flow - Lista de inmuebles enviada', [
+                'to' => $to,
+                'properties_count' => count($properties),
+                'sections_count' => count($sections),
+                'response_status' => $response['status'],
+            ]);
+        } else {
+            Log::error('WhatsApp Expense Flow - Error al enviar lista de inmuebles', [
+                'to' => $to,
+            ]);
+        }
+    }
+
+    /**
+     * Enviar listado de categorías como botones
+     */
+    private function sendCategoryList(string $to, string $tipo): void
+    {
+        $categories = $this->getActiveCategoriesByType($tipo);
+
+        if (empty($categories)) {
+            $this->whatsAppMessageService->sendText($to, 
+                '❌ No hay categorías de tipo ' . $tipo . ' disponibles. Por favor, contacta al administrador.'
+            );
+            return;
+        }
+
+        // Si hay muchas categorías, enviar como lista
+        if (count($categories) > 10) {
+            $this->sendCategoryAsList($to, $categories, $tipo);
+            return;
+        }
+
+        // Enviar como botones si son pocas
+        $buttons = array_slice($categories, 0, 3);
+        
+        $body = "📋 Selecciona la categoría del gasto:\n\n" .
+                "*Tipo: " . ucfirst($tipo) . "*\n\n" .
+                "*Puedes escribir CANCELAR en cualquier momento para cancelar el proceso*";
+
+        $response = $this->whatsAppMessageService->sendButtons($to, $body, $buttons);
+
+        if ($response) {
+            Log::info('WhatsApp Expense Flow - Listado de categorías enviado', [
+                'to' => $to,
+                'tipo' => $tipo,
+                'categories_count' => count($categories),
+                'buttons_sent' => count($buttons),
+                'response_status' => $response['status'],
+            ]);
+        } else {
+            Log::error('WhatsApp Expense Flow - Error al enviar listado de categorías', [
+                'to' => $to,
+                'tipo' => $tipo,
+            ]);
+        }
+    }
+
+    /**
+     * Enviar categorías como lista
+     */
+    private function sendCategoryAsList(string $to, array $categories, string $tipo): void
+    {
+        $sections = [];
+        $chunks = array_chunk($categories, 10);
+
+        foreach ($chunks as $index => $chunk) {
+            $rows = array_map(function ($category) {
+                return [
+                    'id' => $category['id'],
+                    'title' => $category['title'],
+                    'description' => $category['description'] ?? ''
+                ];
+            }, $chunk);
+
+            $sections[] = [
+                'title' => count($chunks) > 1 ? ucfirst($tipo) . " " . ($index + 1) : ucfirst($tipo) . " disponibles",
+                'rows' => $rows
+            ];
+        }
+
+        $body = "📋 Selecciona la categoría del gasto";
+        $buttonText = "Ver categorías";
+
+        $response = $this->whatsAppMessageService->sendList($to, $body, $buttonText, $sections);
+
+        if ($response) {
+            Log::info('WhatsApp Expense Flow - Lista de categorías enviada', [
+                'to' => $to,
+                'tipo' => $tipo,
+                'categories_count' => count($categories),
+                'sections_count' => count($sections),
+                'response_status' => $response['status'],
+            ]);
+        } else {
+            Log::error('WhatsApp Expense Flow - Error al enviar lista de categorías', [
+                'to' => $to,
+                'tipo' => $tipo,
+            ]);
+        }
+    }
+
+    /**
+     * Enviar listado de subcategorías como botones
+     */
+    private function sendSubcategoryList(string $to, int $categoriaId): void
+    {
+        $subcategories = $this->getActiveSubcategoriesByCategory($categoriaId);
+
+        if (empty($subcategories)) {
+            $this->whatsAppMessageService->sendText($to, 
+                '❌ No hay subcategorías disponibles para esta categoría. Por favor, contacta al administrador.'
+            );
+            return;
+        }
+
+        // Si hay muchas subcategorías, enviar como lista
+        if (count($subcategories) > 10) {
+            $this->sendSubcategoryAsList($to, $subcategories);
+            return;
+        }
+
+        // Enviar como botones si son pocas
+        $buttons = array_slice($subcategories, 0, 3);
+        
+        $body = "📝 Selecciona la subcategoría del gasto:\n\n" .
+                "*Puedes escribir CANCELAR en cualquier momento para cancelar el proceso*";
+
+        $response = $this->whatsAppMessageService->sendButtons($to, $body, $buttons);
+
+        if ($response) {
+            Log::info('WhatsApp Expense Flow - Listado de subcategorías enviado', [
+                'to' => $to,
+                'categoria_id' => $categoriaId,
+                'subcategories_count' => count($subcategories),
+                'buttons_sent' => count($buttons),
+                'response_status' => $response['status'],
+            ]);
+        } else {
+            Log::error('WhatsApp Expense Flow - Error al enviar listado de subcategorías', [
+                'to' => $to,
+                'categoria_id' => $categoriaId,
+            ]);
+        }
+    }
+
+    /**
+     * Enviar subcategorías como lista
+     */
+    private function sendSubcategoryAsList(string $to, array $subcategories): void
+    {
+        $sections = [];
+        $chunks = array_chunk($subcategories, 10);
+
+        foreach ($chunks as $index => $chunk) {
+            $rows = array_map(function ($subcategory) {
+                return [
+                    'id' => $subcategory['id'],
+                    'title' => $subcategory['title'],
+                    'description' => $subcategory['description'] ?? ''
+                ];
+            }, $chunk);
+
+            $sections[] = [
+                'title' => count($chunks) > 1 ? "Subcategorías " . ($index + 1) : "Subcategorías disponibles",
+                'rows' => $rows
+            ];
+        }
+
+        $body = "📝 Selecciona la subcategoría del gasto";
+        $buttonText = "Ver subcategorías";
+
+        $response = $this->whatsAppMessageService->sendList($to, $body, $buttonText, $sections);
+
+        if ($response) {
+            Log::info('WhatsApp Expense Flow - Lista de subcategorías enviada', [
+                'to' => $to,
+                'subcategories_count' => count($subcategories),
+                'sections_count' => count($sections),
+                'response_status' => $response['status'],
+            ]);
+        } else {
+            Log::error('WhatsApp Expense Flow - Error al enviar lista de subcategorías', [
+                'to' => $to,
+            ]);
         }
     }
 }
