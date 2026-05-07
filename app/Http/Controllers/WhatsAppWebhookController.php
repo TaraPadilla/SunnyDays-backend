@@ -6,15 +6,20 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Log;
 use App\Services\WhatsApp\WhatsAppMessageService;
+use App\Services\WhatsApp\WhatsAppExpenseFlowService;
 use Illuminate\Support\Facades\Http;
 
 class WhatsAppWebhookController extends Controller
 {
     protected $whatsAppMessageService;
+    protected $whatsAppExpenseFlowService;
 
-    public function __construct(WhatsAppMessageService $whatsAppMessageService)
-    {
+    public function __construct(
+        WhatsAppMessageService $whatsAppMessageService,
+        WhatsAppExpenseFlowService $whatsAppExpenseFlowService
+    ) {
         $this->whatsAppMessageService = $whatsAppMessageService;
+        $this->whatsAppExpenseFlowService = $whatsAppExpenseFlowService;
     }
     /**
      * Verificación del webhook de WhatsApp Cloud API
@@ -118,9 +123,13 @@ class WhatsAppWebhookController extends Controller
                 'message_text' => $messageText,
             ]);
 
-            // Enviar respuesta automática solo si es mensaje de texto y tiene remitente
+            // Delegar manejo del flujo conversacional al servicio especializado
             if ($from && $messageType === 'text') {
-                $this->whatsAppMessageService->sendText($from, 'Aqui nueva arquitectura.');
+                $this->whatsAppExpenseFlowService->handleIncomingMessage([
+                    'from' => $from,
+                    'message_text' => $messageText,
+                    'message_type' => $messageType,
+                ]);
             }
         } elseif ($hasStatuses) {
             Log::info('WhatsApp Webhook - Status update detectado');
