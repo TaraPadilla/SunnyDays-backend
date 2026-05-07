@@ -12,8 +12,8 @@ class WhatsAppMessageService
      */
     public function sendText(string $to, string $message): ?array
     {
-        $phoneNumberId = env('WHATSAPP_PHONE_NUMBER_ID');
-        $accessToken = env('WHATSAPP_ACCESS_TOKEN');
+        $phoneNumberId = config('services.whatsapp.phone_number_id');
+        $accessToken = config('services.whatsapp.access_token');
 
         if (!$phoneNumberId || !$accessToken) {
             Log::warning('WhatsApp Message Service - Configuración incompleta', [
@@ -65,8 +65,8 @@ class WhatsAppMessageService
      */
     public function sendButtons(string $to, string $body, array $buttons): ?array
     {
-        $phoneNumberId = env('WHATSAPP_PHONE_NUMBER_ID');
-        $accessToken = env('WHATSAPP_ACCESS_TOKEN');
+        $phoneNumberId = config('services.whatsapp.phone_number_id');
+        $accessToken = config('services.whatsapp.access_token');
 
         if (!$phoneNumberId || !$accessToken) {
             Log::warning('WhatsApp Message Service - Configuración incompleta', [
@@ -138,8 +138,8 @@ class WhatsAppMessageService
      */
     public function sendList(string $to, string $body, string $buttonText, array $sections): ?array
     {
-        $phoneNumberId = env('WHATSAPP_PHONE_NUMBER_ID');
-        $accessToken = env('WHATSAPP_ACCESS_TOKEN');
+        $phoneNumberId = config('services.whatsapp.phone_number_id');
+        $accessToken = config('services.whatsapp.access_token');
 
         if (!$phoneNumberId || !$accessToken) {
             Log::warning('WhatsApp Message Service - Configuración incompleta', [
