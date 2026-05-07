@@ -141,13 +141,11 @@ class WhatsAppWebhookController extends Controller
 
             // Delegar manejo del flujo conversacional al servicio especializado
             if ($from && ($messageType === 'text' || $messageType === 'interactive')) {
-                $this->whatsAppExpenseFlowService->handleIncomingMessage([
-                    'from' => $from,
-                    'message_text' => $messageText,
-                    'message_type' => $messageType,
-                    'button_id' => $buttonId,
-                    'button_title' => $buttonTitle,
-                ]);
+                if ($messageType === 'text' && $messageText) {
+                    $this->whatsAppExpenseFlowService->handleTextMessage($from, $messageText);
+                } elseif ($messageType === 'interactive' && $buttonId && $buttonTitle) {
+                    $this->whatsAppExpenseFlowService->handleInteractiveMessage($from, $buttonId, $buttonTitle);
+                }
             }
         } elseif ($hasStatuses) {
             Log::info('WhatsApp Webhook - Status update detectado');
