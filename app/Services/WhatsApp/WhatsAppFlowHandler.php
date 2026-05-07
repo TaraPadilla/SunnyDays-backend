@@ -329,6 +329,27 @@ class WhatsAppFlowHandler
                 );
                 break;
                 
+            case 'SELECTING_PAYMENT_TYPE':
+                // Reenviar opciones de tipo de pago
+                $this->sendPaymentTypeOptions($from);
+                break;
+                
+            case 'SELECTING_OBSERVATIONS':
+                // Reenviar solicitud de observaciones
+                $message = "Por favor, ingresa alguna observación o escribe 'NO' si no hay:";
+                $this->messageService->sendText($from, $message);
+                break;
+                
+            case 'COMPLETED':
+                // El flujo ya está completado, no hacer nada
+                break;
+                
+            case 'CANCELLED':
+                // El flujo fue cancelado, reiniciar
+                $this->sendInitialMessage($from);
+                $session->update(['estado_actual' => 'SELECTING_DATE']);
+                break;
+                
             default:
                 // Para cualquier otro estado, reiniciar el flujo
                 Log::info('WhatsApp Flow Handler - Reiniciando flujo por estado no manejado', [
@@ -366,27 +387,11 @@ class WhatsAppFlowHandler
                 'to' => $to,
             ]);
         }
-    }
 
-    /**
-     * Parse and validate date in various formats
-     */
-    private function parseAndValidateDate(?string $dateText): ?\Carbon\Carbon
-    {
-        if (!$dateText) {
-            return null;
-        }
-
-        // Limpiar el texto: quitar espacios extra
-        $cleanText = trim($dateText);
-
-        // Intentar diferentes formatos
+        // Formatos de fecha para parsear
         $formats = [
             'd/m/Y',    // 25/12/2023
             'd-m-Y',    // 25-12-2023
-            'd/m/y',    // 25/12/23
-            'd-m-y',    // 25-12-23
-            'Y-m-d',    // 2023-12-25
             'm/d/Y',    // 12/25/2023
             'm-d-Y',    // 12-25-2023
         ];
@@ -429,5 +434,241 @@ class WhatsAppFlowHandler
         ]);
 
         return null;
+    }
+
+    /**
+     * Handle amount input from user
+     */
+    public function handleAmountInput(string $from, string $message, WhatsAppSession $session): void
+    {
+        if ($session->estado_actual !== 'SELECTING_AMOUNT') {
+            Log::warning('WhatsApp Flow Handler - Monto recibido en estado incorrecto', [
+                'from' => $from,
+                'message' => $message,
+                'estado_actual' => $session->estado_actual,
+            ]);
+            return;
+        }
+
+        // Validar que el monto sea un número válido
+        $amount = $this->parseAmount($message);
+        if ($amount === null || $amount <= 0) {
+            $this->messageService->sendText($from, 
+                '❌ Monto inválido. Por favor, ingresa solo números positivos (ej: 15000, 250.50)'
+            );
+            return;
+        }
+
+        // Guardar monto en la sesión
+        $session->update([
+            'monto' => $amount,
+            'estado_actual' => 'SELECTING_PAYMENT_TYPE',
+        ]);
+
+        Log::info('WhatsApp Flow Handler - Monto ingresado', [
+            'from' => $from,
+            'session_id' => $session->id,
+            'amount' => $amount,
+        ]);
+
+        // Enviar confirmación y solicitar tipo de pago
+        $confirmationMessage = "✅ Monto registrado: $" . number_format($amount, 2, ',', '.') . "\n\n" .
+                               "Ahora selecciona el tipo de pago:";
+        $this->sendPaymentTypeOptions($from);
+    }
+
+    /**
+     * Send payment type options
+     */
+    private function sendPaymentTypeOptions(string $to): void
+    {
+        $buttons = [
+            ['id' => 'PAYMENT_EFECTIVO', 'title' => '💵 Efectivo'],
+            ['id' => 'PAYMENT_TRANSFERENCIA', 'title' => '🏦 Transferencia'],
+            ['id' => 'PAYMENT_TARJETA', 'title' => '💳 Tarjeta'],
+            ['id' => 'PAYMENT_OTRO', 'title' => '📋 Otro']
+        ];
+
+        $body = "💳 Selecciona el tipo de pago:\n\n" .
+                "*Puedes escribir CANCELAR en cualquier momento para cancelar el proceso*";
+
+        $response = $this->messageService->sendButtons($to, $body, $buttons);
+
+        if ($response) {
+            Log::info('WhatsApp Flow Handler - Opciones de pago enviadas', [
+                'to' => $to,
+                'response_status' => $response['status'],
+            ]);
+        } else {
+            Log::error('WhatsApp Flow Handler - Error al enviar opciones de pago', [
+                'to' => $to,
+            ]);
+        }
+    }
+
+    /**
+     * Handle payment type selection
+     */
+    public function handlePaymentTypeSelection(string $from, string $buttonId, WhatsAppSession $session): void
+    {
+        if ($session->estado_actual !== 'SELECTING_PAYMENT_TYPE') {
+            Log::warning('WhatsApp Flow Handler - Tipo de pago recibido en estado incorrecto', [
+                'from' => $from,
+                'button_id' => $buttonId,
+                'estado_actual' => $session->estado_actual,
+            ]);
+            return;
+        }
+
+        // Validar y mapear el tipo de pago
+        $paymentTypes = [
+            'PAYMENT_EFECTIVO' => 'Efectivo',
+            'PAYMENT_TRANSFERENCIA' => 'Transferencia',
+            'PAYMENT_TARJETA' => 'Tarjeta',
+            'PAYMENT_OTRO' => 'Otro'
+        ];
+
+        if (!isset($paymentTypes[$buttonId])) {
+            $this->messageService->sendText($from, 
+                '❌ Opción de pago inválida. Por favor, selecciona una opción válida.'
+            );
+            return;
+        }
+
+        $paymentType = $paymentTypes[$buttonId];
+
+        // Guardar tipo de pago en la sesión
+        $session->update([
+            'tipo_pago' => $paymentType,
+            'estado_actual' => 'SELECTING_OBSERVATIONS',
+        ]);
+
+        Log::info('WhatsApp Flow Handler - Tipo de pago seleccionado', [
+            'from' => $from,
+            'session_id' => $session->id,
+            'payment_type' => $paymentType,
+        ]);
+
+        // Enviar confirmación y solicitar observaciones
+        $confirmationMessage = "✅ Tipo de pago: {$paymentType}\n\n" .
+                               "Por favor, ingresa alguna observación o escribe 'NO' si no hay:";
+        $this->messageService->sendText($from, $confirmationMessage);
+    }
+
+    /**
+     * Handle observations input
+     */
+    public function handleObservationsInput(string $from, string $message, WhatsAppSession $session): void
+    {
+        if ($session->estado_actual !== 'SELECTING_OBSERVATIONS') {
+            Log::warning('WhatsApp Flow Handler - Observaciones recibidas en estado incorrecto', [
+                'from' => $from,
+                'message' => $message,
+                'estado_actual' => $session->estado_actual,
+            ]);
+            return;
+        }
+
+        // Procesar observaciones
+        $observations = trim($message);
+        if (strtoupper($observations) === 'NO' || strtoupper($observations) === 'N/A') {
+            $observations = null;
+        }
+
+        // Guardar observaciones y finalizar el proceso
+        $session->update([
+            'observaciones' => $observations,
+            'estado_actual' => 'COMPLETED',
+        ]);
+
+        Log::info('WhatsApp Flow Handler - Observaciones ingresadas', [
+            'from' => $from,
+            'session_id' => $session->id,
+            'observations' => $observations,
+        ]);
+
+        // Guardar el gasto completo
+        $this->saveExpense($from, $session);
+    }
+
+    /**
+     * Save the complete expense
+     */
+    private function saveExpense(string $from, WhatsAppSession $session): void
+    {
+        try {
+            // Validar que todos los datos necesarios estén presentes
+            if (!$session->fecha || !$session->inmueble_id || !$session->tipo_categoria_id || 
+                !$session->categoria_gasto_id || !$session->monto || !$session->tipo_pago) {
+                
+                $this->messageService->sendText($from, 
+                    '❌ Error: Faltan datos necesarios para guardar el gasto. Por favor, inicia el proceso nuevamente.'
+                );
+                
+                // Resetear la sesión
+                $session->update(['estado_actual' => 'CANCELLED']);
+                return;
+            }
+
+            // Crear el gasto (aquí iría la lógica para guardar en la base de datos)
+            $expenseData = [
+                'fecha' => $session->fecha,
+                'inmueble_id' => $session->inmueble_id,
+                'tipo_categoria_id' => $session->tipo_categoria_id,
+                'categoria_gasto_id' => $session->categoria_gasto_id,
+                'monto' => $session->monto,
+                'tipo_pago' => $session->tipo_pago,
+                'observaciones' => $session->observaciones,
+                'telefono' => $from,
+                'created_at' => now()
+            ];
+
+            // TODO: Implementar el guardado real en la base de datos
+            // $gasto = Gasto::create($expenseData);
+
+            Log::info('WhatsApp Flow Handler - Gasto guardado', [
+                'from' => $from,
+                'session_id' => $session->id,
+                'expense_data' => $expenseData,
+            ]);
+
+            // Enviar confirmación final
+            $confirmationMessage = "✅ *Gasto registrado exitosamente*\n\n" .
+                                   "📅 Fecha: {$session->fecha}\n" .
+                                   "💰 Monto: $" . number_format($session->monto, 2, ',', '.') . "\n" .
+                                   "💳 Tipo de pago: {$session->tipo_pago}\n" .
+                                   "📝 Observaciones: " . ($session->observaciones ?: 'Ninguna') . "\n\n" .
+                                   "¡Gracias por usar el sistema! 🎉";
+            
+            $this->messageService->sendText($from, $confirmationMessage);
+
+        } catch (\Exception $e) {
+            Log::error('WhatsApp Flow Handler - Error al guardar gasto', [
+                'from' => $from,
+                'session_id' => $session->id,
+                'error' => $e->getMessage(),
+            ]);
+
+            $this->messageService->sendText($from, 
+                '❌ Error al guardar el gasto. Por favor, intenta nuevamente o contacta al administrador.'
+            );
+        }
+    }
+
+    /**
+     * Parse amount from string input
+     */
+    private function parseAmount(string $input): ?float
+    {
+        // Eliminar caracteres no numéricos excepto punto y coma
+        $cleanInput = preg_replace('/[^0-9.,]/', '', $input);
+        
+        // Reemplazar coma por punto para decimal
+        $cleanInput = str_replace(',', '.', $cleanInput);
+        
+        // Convertir a float
+        $amount = (float) $cleanInput;
+        
+        return $amount > 0 ? $amount : null;
     }
 }
