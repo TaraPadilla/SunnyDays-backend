@@ -17,9 +17,20 @@ class UserController extends Controller
     {
         Log::info('[UserController] index: petición recibida');
         
-        $users = User::all();
+        // Verificar si el usuario autenticado es admin
+        $currentUser = request()->user();
+        $isAdmin = $currentUser && $currentUser->perfil === 'admin';
         
-        Log::info('[UserController] index: éxito', ['total' => $users->count()]);
+        // Si es admin, mostrar todos; si no, ocultar admins
+        $users = $isAdmin 
+            ? User::all() 
+            : User::where('perfil', '!=', 'admin')->get();
+        
+        Log::info('[UserController] index: éxito', [
+            'total' => $users->count(),
+            'user_is_admin' => $isAdmin,
+            'showing_admins' => $isAdmin
+        ]);
         
         return response()->json([
             'status' => 'success',
