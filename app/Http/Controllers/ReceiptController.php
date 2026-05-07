@@ -34,7 +34,7 @@ class ReceiptController extends Controller
             }
 
             // 3. Configuración del webhook de n8n
-            $n8nWebhookUrl = env('N8N_WEBHOOK_URL');
+            $n8nWebhookUrl = config('services.n8n.webhook_url');
             
             // 4. Preparación de datos para envío
             $fileContent = file_get_contents($file->getRealPath());
