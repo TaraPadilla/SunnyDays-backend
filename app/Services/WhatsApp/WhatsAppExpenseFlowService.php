@@ -111,7 +111,7 @@ class WhatsAppExpenseFlowService
                     // Pedir nuevo monto total manual
                     $activeSession->update(['estado_actual' => 'SELECTING_TOTAL_AMOUNT_MANUAL']);
                     $this->whatsAppMessageService->sendText($from, 
-                        'Por favor, ingresa el monto total del gasto (ej: 119000, 150000):'
+                        'Por favor, ingresa el monto total del gasto:'
                     );
                 } else {
                     $this->whatsAppMessageService->sendText($from, 
@@ -336,7 +336,7 @@ class WhatsAppExpenseFlowService
         $vatAmount = $this->parseAmount($messageText);
         if ($vatAmount === null || $vatAmount < 0) {
             $this->whatsAppMessageService->sendText($from, 
-                '❌ Monto de IVA inválido. Ingresa un valor positivo (ej: 19000, 0, 500):'
+                '❌ Monto de IVA inválido. Ingresa un valor positivo'
             );
             return;
         }
@@ -380,7 +380,7 @@ class WhatsAppExpenseFlowService
         $totalAmount = $this->parseAmount($messageText);
         if ($totalAmount === null || $totalAmount <= 0) {
             $this->whatsAppMessageService->sendText($from, 
-                '❌ Monto total inválido. Ingresa un valor positivo (ej: 119000, 150000):'
+                '❌ Monto total inválido. Ingresa un valor positivo'
             );
             return;
         }

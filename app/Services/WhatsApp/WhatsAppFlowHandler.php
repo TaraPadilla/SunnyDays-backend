@@ -344,7 +344,7 @@ class WhatsAppFlowHandler
             case 'SELECTING_TOTAL_AMOUNT_MANUAL':
                 // Reenviar solicitud de monto total manual
                 $this->messageService->sendText($from, 
-                    'Por favor, ingresa el monto total del gasto (ej: 119000, 150000):'
+                    'Por favor, ingresa el monto total del gasto:'
                 );
                 break;
                 
@@ -476,7 +476,7 @@ class WhatsAppFlowHandler
         $amount = $this->parseAmount($message);
         if ($amount === null || $amount <= 0) {
             $this->messageService->sendText($from, 
-                '❌ Monto inválido. Por favor, ingresa solo números positivos (ej: 15000, 250.50)'
+                '❌ Monto inválido. Por favor, ingresa solo números positivos'
             );
             return;
         }
@@ -582,7 +582,7 @@ class WhatsAppFlowHandler
         if ($ivaAmount === null) {
             // Es VAT_OTRO, pedir valor manual inmediatamente
             $this->messageService->sendText($from, 
-                'Por favor, ingresa el monto del IVA (ej: 19000, 0):'
+                'Por favor, ingresa el monto del IVA:'
             );
             return;
         }
@@ -640,7 +640,7 @@ class WhatsAppFlowHandler
             
             $this->messageService->sendText($from, 
                 '✅ Fecha confirmada\n\n' .
-                'Por favor, ingresa el monto sin IVA (ej: 15000, 250.50):'
+                'Por favor, ingresa el monto sin IVA:'
             );
         } else {
             $this->messageService->sendText($from, 
