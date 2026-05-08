@@ -96,7 +96,59 @@ class WhatsAppExpenseFlowService
                 break;
                 
             case 'SELECTING_VAT':
-                $this->flowHandler->handleVATSelection($from, $buttonId, $activeSession);
+                // Manejar botones de IVA directamente (como SELECTING_TOTAL_AMOUNT)
+                if ($buttonId === 'VAT_CALCULADO') {
+                    // Calcular 19% del monto sin IVA
+                    $ivaAmount = $activeSession->monto_sin_iva * 0.19;
+                    $montoTotal = $activeSession->monto_sin_iva + $ivaAmount;
+                    
+                    $activeSession->update([
+                        'iva' => $ivaAmount,
+                        'monto_total' => $montoTotal,
+                        'estado_actual' => 'SELECTING_TOTAL_AMOUNT',
+                    ]);
+                    
+                    // Enviar confirmación del total con botones
+                    $confirmationMessage = "✅ IVA: $" . number_format($ivaAmount, 2, ',', '.') . "\n\n" .
+                                           "💰 *Monto total: $" . number_format($montoTotal, 2, ',', '.') . "*\n\n" .
+                                           "¿Confirmas este monto total?";
+                    $buttons = [
+                        ['id' => 'CONFIRM_TOTAL', 'title' => 'Confirmar'],
+                        ['id' => 'MODIFY_TOTAL', 'title' => 'Modificar']
+                    ];
+                    $this->whatsAppMessageService->sendButtons($from, $confirmationMessage, $buttons);
+                    
+                } elseif ($buttonId === 'VAT_0') {
+                    // IVA cero
+                    $montoTotal = $activeSession->monto_sin_iva;
+                    
+                    $activeSession->update([
+                        'iva' => 0,
+                        'monto_total' => $montoTotal,
+                        'estado_actual' => 'SELECTING_TOTAL_AMOUNT',
+                    ]);
+                    
+                    // Enviar confirmación del total con botones
+                    $confirmationMessage = "✅ IVA: $0\n\n" .
+                                           "💰 *Monto total: $" . number_format($montoTotal, 2, ',', '.') . "*\n\n" .
+                                           "¿Confirmas este monto total?";
+                    $buttons = [
+                        ['id' => 'CONFIRM_TOTAL', 'title' => 'Confirmar'],
+                        ['id' => 'MODIFY_TOTAL', 'title' => 'Modificar']
+                    ];
+                    $this->whatsAppMessageService->sendButtons($from, $confirmationMessage, $buttons);
+                    
+                } elseif ($buttonId === 'VAT_OTRO') {
+                    // Pedir IVA manual
+                    $this->whatsAppMessageService->sendText($from, 
+                        'Por favor, ingresa el monto del IVA:'
+                    );
+                    
+                } else {
+                    $this->whatsAppMessageService->sendText($from, 
+                        '❌ Opción de IVA inválida. Por favor, selecciona una opción válida.'
+                    );
+                }
                 break;
                 
             case 'SELECTING_TOTAL_AMOUNT':

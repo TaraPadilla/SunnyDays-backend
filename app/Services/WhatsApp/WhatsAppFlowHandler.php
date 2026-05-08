@@ -580,15 +580,25 @@ class WhatsAppFlowHandler
         Log::info('WhatsApp Flow Handler - Procesando selección IVA', [
             'from' => $from,
             'button_id' => $buttonId,
-            'available_options' => array_keys($vatAmounts)
+            'button_id_length' => strlen($buttonId),
+            'button_id_hex' => bin2hex($buttonId),
+            'available_options' => array_keys($vatAmounts),
+            'vat_array' => $vatAmounts,
+            'isset_VAT_OTRO' => isset($vatAmounts['VAT_OTRO']),
+            'isset_buttonId' => isset($vatAmounts[$buttonId]),
+            'array_key_exists_VAT_OTRO' => array_key_exists('VAT_OTRO', $vatAmounts),
+            'array_key_exists_buttonId' => array_key_exists($buttonId, $vatAmounts)
         ]);
 
-        // Validar que el buttonId sea uno de los esperados
-        if (!isset($vatAmounts[$buttonId])) {
+        // Validar que el buttonId sea uno de los esperados (usar array_key_exists para manejar valores null)
+        if (!array_key_exists($buttonId, $vatAmounts)) {
             Log::warning('WhatsApp Flow Handler - Botón IVA no reconocido', [
                 'from' => $from,
                 'button_id' => $buttonId,
-                'expected_buttons' => array_keys($vatAmounts)
+                'button_id_length' => strlen($buttonId),
+                'button_id_hex' => bin2hex($buttonId),
+                'expected_buttons' => array_keys($vatAmounts),
+                'vat_array' => $vatAmounts
             ]);
             
             $this->messageService->sendText($from, 
