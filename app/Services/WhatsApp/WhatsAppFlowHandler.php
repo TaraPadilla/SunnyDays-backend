@@ -248,7 +248,7 @@ class WhatsAppFlowHandler
             'session_id' => $session->id,
         ]);
 
-        $parsedDate = $this->parseAndValidateDate($messageText);
+        $parsedDate = $this->parseDateFromText($messageText);
 
         if (!$parsedDate) {
             $this->messageService->sendText($from, 
