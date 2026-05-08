@@ -436,11 +436,17 @@ class WhatsAppExpenseFlowService
             'total_amount' => $montoTotal,
         ]);
 
-        // Enviar confirmación y solicitar confirmación del total
+        // Enviar confirmación con botones Confirmar/Modificar
         $confirmationMessage = "✅ IVA: $" . number_format($vatAmount, 2, ',', '.') . "\n\n" .
                                "💰 *Monto total: $" . number_format($montoTotal, 2, ',', '.') . "*\n\n" .
-                               "¿Confirmas este monto total? Responde SI o NO:";
-        $this->whatsAppMessageService->sendText($from, $confirmationMessage);
+                               "¿Confirmas este monto total?";
+        
+        $buttons = [
+            ['id' => 'CONFIRM_TOTAL', 'title' => 'Confirmar'],
+            ['id' => 'MODIFY_TOTAL', 'title' => 'Modificar']
+        ];
+        
+        $this->whatsAppMessageService->sendButtons($from, $confirmationMessage, $buttons);
     }
 
     /**
