@@ -435,6 +435,7 @@ class WhatsAppFlowHandler
         
         // Formatos de fecha para parsear
         $formats = [
+            'Y-m-d',    // 2023-12-25 (ISO format)
             'd/m/Y',    // 25/12/2023
             'd-m-Y',    // 25-12-2023
             'm/d/Y',    // 12/25/2023
@@ -489,7 +490,7 @@ class WhatsAppFlowHandler
         $cleanText = trim($text);
         
         $formats = [
-            'd/m/Y', 'd-m-Y', 'm/d/Y', 'm-d-Y',
+            'Y-m-d', 'd/m/Y', 'd-m-Y', 'm/d/Y', 'm-d-Y',
         ];
 
         foreach ($formats as $format) {
