@@ -295,8 +295,8 @@ class WhatsAppExpenseFlowService
                     // Manejar entrada manual de monto total
                     $this->handleManualTotalAmountInput($from, $messageText, $existingSession);
                 } elseif ($existingSession->estado_actual === 'SELECTING_TOTAL_AMOUNT') {
-                    // Manejar confirmación de monto total
-                    $this->flowHandler->handleTotalAmountConfirmation($from, $messageText, $existingSession);
+                    // En este estado se manejan botones, no texto. Si llega texto, reenviar botones.
+                    $this->flowHandler->sendNextStepMessage($from, $existingSession);
                 } elseif ($existingSession->estado_actual === 'SELECTING_OBSERVATIONS_MANUAL') {
                     // Manejar entrada manual de observaciones
                     $this->flowHandler->handleObservationsInput($from, $messageText, $existingSession);
