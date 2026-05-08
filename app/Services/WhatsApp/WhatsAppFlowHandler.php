@@ -251,9 +251,21 @@ class WhatsAppFlowHandler
         $parsedDate = $this->parseDateFromText($messageText);
 
         if (!$parsedDate) {
-            $this->messageService->sendText($from, 
-                '❌ Fecha no válida. Por favor, usa el formato DD/MM/AAAA\n\nEjemplo: 25/12/2023'
-            );
+            $errorType = $this->getDateValidationError($messageText);
+            
+            if ($errorType === 'future') {
+                $this->messageService->sendText($from, 
+                    "❌ La fecha ingresada está en el futuro. Por favor, ingresa una fecha pasada o actual.\n\nFormato: DD/MM/AAAA\nEjemplo: 25/12/2023"
+                );
+            } elseif ($errorType === 'too_old') {
+                $this->messageService->sendText($from, 
+                    "❌ La fecha es muy antigua (más de 1 año). Por favor, ingresa una fecha más reciente.\n\nFormato: DD/MM/AAAA\nEjemplo: 25/12/2023"
+                );
+            } else {
+                $this->messageService->sendText($from, 
+                    "❌ Fecha no válida. Por favor, usa el formato DD/MM/AAAA\n\nEjemplo: 25/12/2023"
+                );
+            }
             return;
         }
 
@@ -467,6 +479,39 @@ class WhatsAppFlowHandler
         ]);
 
         return null;
+    }
+
+    /**
+     * Get the specific validation error type for a date
+     */
+    private function getDateValidationError(string $text): string
+    {
+        $cleanText = trim($text);
+        
+        $formats = [
+            'd/m/Y', 'd-m-Y', 'm/d/Y', 'm-d-Y',
+        ];
+
+        foreach ($formats as $format) {
+            try {
+                $date = \Carbon\Carbon::createFromFormat($format, $cleanText);
+                
+                if ($date->isFuture()) {
+                    return 'future';
+                }
+                
+                if ($date->diffInDays(now()) > 365) {
+                    return 'too_old';
+                }
+                
+                // If we get here, the date is valid
+                return 'invalid';
+            } catch (\Exception $e) {
+                continue;
+            }
+        }
+
+        return 'invalid';
     }
 
     /**
