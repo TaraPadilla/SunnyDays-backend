@@ -120,6 +120,24 @@ class WhatsAppExpenseFlowService
                 }
                 break;
                 
+            case 'SELECTING_OBSERVATIONS':
+                // En este estado manejar botones de observaciones
+                if ($buttonId === 'OBSERVATIONS_YES') {
+                    // Pedir observación manual
+                    $activeSession->update(['estado_actual' => 'SELECTING_OBSERVATIONS_MANUAL']);
+                    $this->whatsAppMessageService->sendText($from, 
+                        'Por favor, ingresa la observación:'
+                    );
+                } elseif ($buttonId === 'OBSERVATIONS_NO') {
+                    // Finalizar sin observación
+                    $this->flowHandler->handleObservationsInput($from, 'NO', $activeSession);
+                } else {
+                    $this->whatsAppMessageService->sendText($from, 
+                        '❌ Opción inválida. Por favor, selecciona Si o No.'
+                    );
+                }
+                break;
+                
             default:
                 Log::warning('WhatsApp Expense Flow - Botón recibido en estado no manejado', [
                     'from' => $from,
@@ -222,6 +240,9 @@ class WhatsAppExpenseFlowService
                 } elseif ($existingSession->estado_actual === 'SELECTING_TOTAL_AMOUNT') {
                     // Manejar confirmación de monto total
                     $this->flowHandler->handleTotalAmountConfirmation($from, $messageText, $existingSession);
+                } elseif ($existingSession->estado_actual === 'SELECTING_OBSERVATIONS_MANUAL') {
+                    // Manejar entrada manual de observaciones
+                    $this->flowHandler->handleObservationsInput($from, $messageText, $existingSession);
                 } elseif ($existingSession->estado_actual === 'SELECTING_OBSERVATIONS') {
                     // Manejar entrada de observaciones
                     $this->flowHandler->handleObservationsInput($from, $messageText, $existingSession);

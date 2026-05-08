@@ -349,9 +349,20 @@ class WhatsAppFlowHandler
                 break;
                 
             case 'SELECTING_OBSERVATIONS':
-                // Reenviar solicitud de observaciones
-                $message = "Por favor, ingresa alguna observación o escribe 'NO' si no hay:";
-                $this->messageService->sendText($from, $message);
+                // Enviar pregunta sobre observaciones con botones
+                $message = "¿Desea agregar una observación?";
+                $buttons = [
+                    ['id' => 'OBSERVATIONS_YES', 'title' => 'Si'],
+                    ['id' => 'OBSERVATIONS_NO', 'title' => 'No']
+                ];
+                $this->messageService->sendButtons($from, $message, $buttons);
+                break;
+                
+            case 'SELECTING_OBSERVATIONS_MANUAL':
+                // Reenviar solicitud de observación manual
+                $this->messageService->sendText($from, 
+                    'Por favor, ingresa la observación:'
+                );
                 break;
                 
             case 'COMPLETED':
