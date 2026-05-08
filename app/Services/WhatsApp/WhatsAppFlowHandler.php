@@ -560,7 +560,7 @@ class WhatsAppFlowHandler
 
         // Validar y mapear el IVA (ahora son montos directos)
         $vatAmounts = [
-            'VAT_CALCULADO' => null, // Se calculará dinámicamente
+            'VAT_CALCULADO' => 'CALCULAR', // Se calculará dinámicamente
             'VAT_0' => 0,
             'VAT_OTRO' => null // Pedirá valor manual
         ];
@@ -581,15 +581,9 @@ class WhatsAppFlowHandler
 
         if ($ivaAmount === null) {
             // Es VAT_OTRO, pedir valor manual inmediatamente
-            if ($buttonId === 'VAT_OTRO') {
-                $this->messageService->sendText($from, 
-                    'Por favor, ingresa el monto del IVA (ej: 19000, 0):'
-                );
-            } else {
-                $this->messageService->sendText($from, 
-                    '❌ Opción de IVA inválida. Por favor, selecciona una opción válida.'
-                );
-            }
+            $this->messageService->sendText($from, 
+                'Por favor, ingresa el monto del IVA (ej: 19000, 0):'
+            );
             return;
         }
 
