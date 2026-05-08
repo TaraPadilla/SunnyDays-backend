@@ -323,14 +323,29 @@ class WhatsAppFlowHandler
                 break;
                 
             case 'SELECTING_VAT':
-                // Reenviar opciones de IVA
-                $this->sendVATOptions($from);
+                // Reenviar opciones de IVA con el monto calculado dinámicamente
+                $this->sendVATOptions($from, $session->monto_sin_iva);
                 break;
                 
             case 'SELECTING_TOTAL_AMOUNT':
-                // Reenviar solicitud de confirmación del total
-                $message = "Por favor, confirma el monto total respondiendo SI o NO:";
-                $this->messageService->sendText($from, $message);
+                // Reenviar solicitud de confirmación del total con botones
+                $montoTotal = $session->monto_total;
+                $confirmationMessage = "💰 *Monto total: $" . number_format($montoTotal, 2, ',', '.') . "*\n\n" .
+                                       "¿Confirmas este monto total?";
+                
+                $buttons = [
+                    ['id' => 'CONFIRM_TOTAL', 'title' => 'Confirmar'],
+                    ['id' => 'MODIFY_TOTAL', 'title' => 'Modificar']
+                ];
+                
+                $this->messageService->sendButtons($from, $confirmationMessage, $buttons);
+                break;
+                
+            case 'SELECTING_TOTAL_AMOUNT_MANUAL':
+                // Reenviar solicitud de monto total manual
+                $this->messageService->sendText($from, 
+                    'Por favor, ingresa el monto total del gasto (ej: 119000, 150000):'
+                );
                 break;
                 
             case 'SELECTING_OBSERVATIONS':
@@ -595,11 +610,17 @@ class WhatsAppFlowHandler
             'total_amount' => $montoTotal,
         ]);
 
-        // Enviar confirmación y solicitar confirmación del total
+        // Enviar confirmación y solicitar confirmación del total con botones
         $confirmationMessage = "✅ IVA: $" . number_format($ivaAmount, 2, ',', '.') . "\n\n" .
                                "💰 *Monto total: $" . number_format($montoTotal, 2, ',', '.') . "*\n\n" .
-                               "¿Confirmas este monto total? Responde SI o NO:";
-        $this->messageService->sendText($from, $confirmationMessage);
+                               "¿Confirmas este monto total?";
+        
+        $buttons = [
+            ['id' => 'CONFIRM_TOTAL', 'title' => 'Confirmar'],
+            ['id' => 'MODIFY_TOTAL', 'title' => 'Modificar']
+        ];
+        
+        $this->messageService->sendButtons($from, $confirmationMessage, $buttons);
     }
 
     /**

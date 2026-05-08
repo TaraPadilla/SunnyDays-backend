@@ -100,10 +100,24 @@ class WhatsAppExpenseFlowService
                 break;
                 
             case 'SELECTING_TOTAL_AMOUNT':
-                // En este estado no se pueden seleccionar opciones de IVA
-                $this->whatsAppMessageService->sendText($from, 
-                    '❌ Ya has seleccionado un monto de IVA. Por favor, confirma el monto total respondiendo SI o NO.'
-                );
+                // En este estado manejar botones de confirmación del total
+                if ($buttonId === 'CONFIRM_TOTAL') {
+                    // Confirmar el monto calculado y pasar a observaciones
+                    $activeSession->update(['estado_actual' => 'SELECTING_OBSERVATIONS']);
+                    $this->whatsAppMessageService->sendText($from, 
+                        '✅ Monto total confirmado. Ahora ingresa alguna observación o escribe "NO" si no hay:'
+                    );
+                } elseif ($buttonId === 'MODIFY_TOTAL') {
+                    // Pedir nuevo monto total manual
+                    $activeSession->update(['estado_actual' => 'SELECTING_TOTAL_AMOUNT_MANUAL']);
+                    $this->whatsAppMessageService->sendText($from, 
+                        'Por favor, ingresa el monto total del gasto (ej: 119000, 150000):'
+                    );
+                } else {
+                    $this->whatsAppMessageService->sendText($from, 
+                        '❌ Opción inválida. Por favor, selecciona Confirmar o Modificar.'
+                    );
+                }
                 break;
                 
             default:
@@ -189,6 +203,9 @@ class WhatsAppExpenseFlowService
                         // No es numérico, enviar opciones de IVA
                         $this->flowHandler->sendNextStepMessage($from, $existingSession);
                     }
+                } elseif ($existingSession->estado_actual === 'SELECTING_TOTAL_AMOUNT_MANUAL') {
+                    // Manejar entrada manual de monto total
+                    $this->handleManualTotalAmountInput($from, $messageText, $existingSession);
                 } elseif ($existingSession->estado_actual === 'SELECTING_TOTAL_AMOUNT') {
                     // Manejar confirmación de monto total
                     $this->flowHandler->handleTotalAmountConfirmation($from, $messageText, $existingSession);
@@ -333,6 +350,45 @@ class WhatsAppExpenseFlowService
                                "💰 *Monto total: $" . number_format($montoTotal, 2, ',', '.') . "*\n\n" .
                                "¿Confirmas este monto total? Responde SI o NO:";
         $this->whatsAppMessageService->sendText($from, $confirmationMessage);
+    }
+
+    /**
+     * Handle manual total amount input from user
+     */
+    private function handleManualTotalAmountInput(string $from, string $messageText, WhatsAppSession $session): void
+    {
+        Log::info('WhatsApp Expense Flow - Procesando monto total manual', [
+            'from' => $from,
+            'message_text' => $messageText,
+            'session_id' => $session->id,
+        ]);
+
+        // Validar que sea un número válido (monto total)
+        $totalAmount = $this->parseAmount($messageText);
+        if ($totalAmount === null || $totalAmount <= 0) {
+            $this->whatsAppMessageService->sendText($from, 
+                '❌ Monto total inválido. Ingresa un valor positivo (ej: 119000, 150000):'
+            );
+            return;
+        }
+
+        // Guardar el nuevo monto total
+        $session->update([
+            'monto_total' => $totalAmount,
+            'estado_actual' => 'SELECTING_OBSERVATIONS',
+        ]);
+
+        Log::info('WhatsApp Expense Flow - Monto total manual procesado', [
+            'from' => $from,
+            'session_id' => $session->id,
+            'total_amount' => $totalAmount,
+        ]);
+
+        // Enviar confirmación y solicitar observaciones
+        $this->whatsAppMessageService->sendText($from, 
+            '✅ Monto total actualizado: $' . number_format($totalAmount, 2, ',', '.') . "\n\n" .
+            'Ahora ingresa alguna observación o escribe "NO" si no hay:'
+        );
     }
 
     /**
