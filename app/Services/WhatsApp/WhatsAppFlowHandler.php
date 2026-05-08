@@ -576,9 +576,36 @@ class WhatsAppFlowHandler
             'VAT_OTRO' => null // Pedirá valor manual
         ];
 
+        // Log para depuración
+        Log::info('WhatsApp Flow Handler - Procesando selección IVA', [
+            'from' => $from,
+            'button_id' => $buttonId,
+            'available_options' => array_keys($vatAmounts)
+        ]);
+
+        // Validar que el buttonId sea uno de los esperados
         if (!isset($vatAmounts[$buttonId])) {
+            Log::warning('WhatsApp Flow Handler - Botón IVA no reconocido', [
+                'from' => $from,
+                'button_id' => $buttonId,
+                'expected_buttons' => array_keys($vatAmounts)
+            ]);
+            
             $this->messageService->sendText($from, 
                 '❌ Opción de IVA inválida. Por favor, selecciona una opción válida.'
+            );
+            return;
+        }
+
+        // Manejar VAT_OTRO primero para evitar problemas
+        if ($buttonId === 'VAT_OTRO') {
+            Log::info('WhatsApp Flow Handler - Usuario seleccionó IVA otro valor', [
+                'from' => $from,
+                'button_id' => $buttonId
+            ]);
+            
+            $this->messageService->sendText($from, 
+                'Por favor, ingresa el monto del IVA:'
             );
             return;
         }
@@ -587,15 +614,8 @@ class WhatsAppFlowHandler
         if ($buttonId === 'VAT_CALCULADO') {
             $ivaAmount = $session->monto_sin_iva * 0.19;
         } else {
+            // VAT_0 o cualquier otra opción directa
             $ivaAmount = $vatAmounts[$buttonId];
-        }
-
-        if ($ivaAmount === null) {
-            // Es VAT_OTRO, pedir valor manual inmediatamente
-            $this->messageService->sendText($from, 
-                'Por favor, ingresa el monto del IVA:'
-            );
-            return;
         }
 
         // Calcular monto total y guardar
