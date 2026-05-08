@@ -494,24 +494,26 @@ class WhatsAppFlowHandler
 
         // Enviar confirmación y solicitar IVA
         $confirmationMessage = "✅ Monto sin IVA registrado: $" . number_format($amount, 2, ',', '.') . "\n\n" .
-                               "Ahora selecciona el porcentaje de IVA:";
-        $this->sendVATOptions($from);
+                               "Ahora selecciona el monto de IVA:";
+        $this->sendVATOptions($from, $amount);
     }
 
     /**
      * Send VAT options
      */
-    private function sendVATOptions(string $to): void
+    private function sendVATOptions(string $to, float $montoSinIva): void
     {
+        // Calcular 19% del monto sin IVA
+        $ivaCalculado = $montoSinIva * 0.19;
+        
         $buttons = [
-            ['id' => 'VAT_19000', 'title' => 'IVA $19.000'],
+            ['id' => 'VAT_CALCULADO', 'title' => 'IVA $' . number_format($ivaCalculado, 0, ',', '.')],
             ['id' => 'VAT_0', 'title' => 'IVA $0'],
             ['id' => 'VAT_OTRO', 'title' => 'Otro valor']
         ];
 
         $body = "💰 Selecciona el monto del IVA:\n\n" .
-                "*Puedes escribir CANCELAR en cualquier momento para cancelar el proceso*\n\n" .
-                "Ejemplo: Si el gasto es $100.000 y el IVA es $19.000, selecciona '$19.000'";
+                "*Puedes escribir CANCELAR en cualquier momento para cancelar el proceso*";
 
         $response = $this->messageService->sendButtons($to, $body, $buttons);
 
@@ -543,7 +545,7 @@ class WhatsAppFlowHandler
 
         // Validar y mapear el IVA (ahora son montos directos)
         $vatAmounts = [
-            'VAT_19000' => 19000,
+            'VAT_CALCULADO' => null, // Se calculará dinámicamente
             'VAT_0' => 0,
             'VAT_OTRO' => null // Pedirá valor manual
         ];
@@ -555,7 +557,12 @@ class WhatsAppFlowHandler
             return;
         }
 
-        $ivaAmount = $vatAmounts[$buttonId];
+        // Si es VAT_CALCULADO, calcular el 19% del monto sin IVA
+        if ($buttonId === 'VAT_CALCULADO') {
+            $ivaAmount = $session->monto_sin_iva * 0.19;
+        } else {
+            $ivaAmount = $vatAmounts[$buttonId];
+        }
 
         if ($ivaAmount === null) {
             // Es VAT_OTRO, pedir valor manual inmediatamente
