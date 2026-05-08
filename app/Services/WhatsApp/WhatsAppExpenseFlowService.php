@@ -171,7 +171,20 @@ class WhatsAppExpenseFlowService
                 // Crear nueva sesión y enviar primer paso
                 $this->createNewSessionAndStart($from);
             } else {
-                // Sesión válida, continuar con el flujo
+                // Sesión válida, verificar si está completada para iniciar nuevo gasto
+                if ($existingSession->estado_actual === 'COMPLETED' || $existingSession->estado_actual === 'CANCELLED') {
+                    Log::info('WhatsApp Expense Flow - Sesión finalizada, iniciando nuevo gasto', [
+                        'from' => $from,
+                        'session_id' => $existingSession->id,
+                        'estado_actual' => $existingSession->estado_actual,
+                    ]);
+                    
+                    // Crear nueva sesión y enviar primer paso
+                    $this->createNewSessionAndStart($from);
+                    return;
+                }
+                
+                // Continuar con el flujo normal
                 Log::info('WhatsApp Expense Flow - Continuando sesión existente', [
                     'from' => $from,
                     'session_id' => $existingSession->id,
@@ -412,5 +425,22 @@ class WhatsAppExpenseFlowService
         }
         
         return $percentage;
+    }
+
+    /**
+     * Parse amount from string input
+     */
+    private function parseAmount(string $input): ?float
+    {
+        // Eliminar caracteres no numéricos excepto punto y coma
+        $cleanInput = preg_replace('/[^0-9.,]/', '', $input);
+        
+        // Reemplazar coma por punto para decimal
+        $cleanInput = str_replace(',', '.', $cleanInput);
+        
+        // Convertir a float
+        $amount = (float) $cleanInput;
+        
+        return $amount > 0 ? $amount : null;
     }
 }
