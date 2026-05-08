@@ -685,7 +685,7 @@ class WhatsAppFlowHandler
      */
     public function handleObservationsInput(string $from, string $message, WhatsAppSession $session): void
     {
-        if ($session->estado_actual !== 'SELECTING_OBSERVATIONS') {
+        if (!in_array($session->estado_actual, ['SELECTING_OBSERVATIONS', 'SELECTING_OBSERVATIONS_MANUAL'])) {
             Log::warning('WhatsApp Flow Handler - Observaciones recibidas en estado incorrecto', [
                 'from' => $from,
                 'message' => $message,

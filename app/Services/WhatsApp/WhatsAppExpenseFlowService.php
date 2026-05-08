@@ -102,11 +102,16 @@ class WhatsAppExpenseFlowService
             case 'SELECTING_TOTAL_AMOUNT':
                 // En este estado manejar botones de confirmación del total
                 if ($buttonId === 'CONFIRM_TOTAL') {
-                    // Confirmar el monto calculado y pasar a observaciones
+                    // Confirmar el monto calculado y pasar a observaciones con botones
                     $activeSession->update(['estado_actual' => 'SELECTING_OBSERVATIONS']);
-                    $this->whatsAppMessageService->sendText($from, 
-                        '✅ Monto total confirmado. Ahora ingresa alguna observación o escribe "NO" si no hay:'
-                    );
+                    
+                    // Enviar botones Si/No para observaciones
+                    $message = "¿Desea agregar una observación?";
+                    $buttons = [
+                        ['id' => 'OBSERVATIONS_YES', 'title' => 'Si'],
+                        ['id' => 'OBSERVATIONS_NO', 'title' => 'No']
+                    ];
+                    $this->whatsAppMessageService->sendButtons($from, $message, $buttons);
                 } elseif ($buttonId === 'MODIFY_TOTAL') {
                     // Pedir nuevo monto total manual
                     $activeSession->update(['estado_actual' => 'SELECTING_TOTAL_AMOUNT_MANUAL']);
