@@ -157,11 +157,12 @@ class WhatsAppExpenseFlowService
                     // Confirmar el monto calculado y pasar a observaciones con botones
                     $activeSession->update(['estado_actual' => 'SELECTING_OBSERVATIONS']);
                     
-                    // Enviar botones Si/No para observaciones
-                    $message = "¿Desea agregar una observación?";
+                    // Enviar botones Agregar Observacion/Guardar Gasto
+                    $message = "💰 *Monto total: $" . number_format($activeSession->monto_total, 2, ',', '.') . "*\n\n" .
+                               "¿Qué deseas hacer?";
                     $buttons = [
-                        ['id' => 'OBSERVATIONS_YES', 'title' => 'Si'],
-                        ['id' => 'OBSERVATIONS_NO', 'title' => 'No']
+                        ['id' => 'ADD_OBSERVATION', 'title' => 'Agregar Observacion'],
+                        ['id' => 'SAVE_EXPENSE', 'title' => 'Guardar Gasto']
                     ];
                     $this->whatsAppMessageService->sendButtons($from, $message, $buttons);
                 } elseif ($buttonId === 'MODIFY_TOTAL') {
@@ -179,18 +180,18 @@ class WhatsAppExpenseFlowService
                 
             case 'SELECTING_OBSERVATIONS':
                 // En este estado manejar botones de observaciones
-                if ($buttonId === 'OBSERVATIONS_YES') {
+                if ($buttonId === 'ADD_OBSERVATION') {
                     // Pedir observación manual
                     $activeSession->update(['estado_actual' => 'SELECTING_OBSERVATIONS_MANUAL']);
                     $this->whatsAppMessageService->sendText($from, 
                         'Por favor, ingresa la observación:'
                     );
-                } elseif ($buttonId === 'OBSERVATIONS_NO') {
-                    // Finalizar sin observación
+                } elseif ($buttonId === 'SAVE_EXPENSE') {
+                    // Guardar gasto directamente
                     $this->flowHandler->handleObservationsInput($from, 'NO', $activeSession);
                 } else {
                     $this->whatsAppMessageService->sendText($from, 
-                        '❌ Opción inválida. Por favor, selecciona Si o No.'
+                        '❌ Opción inválida. Por favor, selecciona Agregar Observacion o Guardar Gasto.'
                     );
                 }
                 break;
