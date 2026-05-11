@@ -791,50 +791,79 @@ class WhatsAppFlowHandler
                 return;
             }
 
-            // Crear el gasto (aquí iría la lógica para guardar en la base de datos)
+            // Mapear campos de WhatsAppSession a Gasto model
             $expenseData = [
-                'fecha_gasto' => $session->fecha_gasto,
+                'fecha' => $session->fecha_gasto,
                 'inmueble_id' => $session->inmueble_id,
-                'tipo_categoria_id' => $session->tipo_categoria_id,
-                'categoria_gasto_id' => $session->categoria_gasto_id,
+                'categoria_id' => $session->tipo_categoria_id,
+                'subcategoria_id' => $session->categoria_gasto_id,
                 'monto_sin_iva' => $session->monto_sin_iva,
-                'iva' => $session->iva,
+                'iva' => $session->iva ?? 0,
                 'monto_total' => $session->monto_total,
                 'observaciones' => $session->observaciones,
-                'telefono' => $from,
-                'created_at' => now()
             ];
 
-            // TODO: Implementar el guardado real en la base de datos
-            // $gasto = Gasto::create($expenseData);
-
-            Log::info('WhatsApp Flow Handler - Gasto guardado', [
+            Log::info('WhatsApp Flow Handler - Creando gasto', [
                 'from' => $from,
                 'session_id' => $session->id,
                 'expense_data' => $expenseData,
             ]);
 
+            // Crear el gasto usando el mismo método que GastoController
+            $gasto = \App\Models\Gasto::create($expenseData);
+
+            Log::info('WhatsApp Flow Handler - Gasto guardado exitosamente', [
+                'from' => $from,
+                'session_id' => $session->id,
+                'gasto_id' => $gasto->id,
+            ]);
+
+            // Marcar la sesión como completada
+            $session->update([
+                'estado_actual' => 'COMPLETED',
+                'completed_at' => now(),
+            ]);
+
             // Enviar confirmación final
+            $fechaFormateada = \Carbon\Carbon::parse($session->fecha_gasto)->format('d/m/Y');
             $confirmationMessage = "✅ *Gasto registrado exitosamente*\n\n" .
-                                   "📅 Fecha: {$session->fecha_gasto}\n" .
-                                   "💰 Monto sin IVA: $" . number_format($session->monto_sin_iva, 2, ',', '.') . "\n" .
-                                   "� IVA: $" . number_format($session->iva, 2, ',', '.') . "\n" .
-                                   "💰 Monto total: $" . number_format($session->monto_total, 2, ',', '.') . "\n" .
+                                   "📅 Fecha: {$fechaFormateada}\n" .
+                                   "💰 Monto sin IVA: $" . number_format($session->monto_sin_iva, 0, ',', '.') . "\n" .
+                                   "💵 IVA: $" . number_format($session->iva ?? 0, 0, ',', '.') . "\n" .
+                                   "💰 Monto total: $" . number_format($session->monto_total, 0, ',', '.') . "\n" .
                                    "📝 Observaciones: " . ($session->observaciones ?: 'Ninguna') . "\n\n" .
                                    "¡Gracias por usar el sistema! 🎉";
             
             $this->messageService->sendText($from, $confirmationMessage);
+
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            Log::error('WhatsApp Flow Handler - Error de validación al guardar gasto', [
+                'from' => $from,
+                'session_id' => $session->id,
+                'errors' => $e->errors(),
+            ]);
+
+            $this->messageService->sendText($from, 
+                '❌ Error de validación: ' . implode(', ', $e->errors())
+            );
+            
+            // Resetear la sesión
+            $session->update(['estado_actual' => 'CANCELLED']);
 
         } catch (\Exception $e) {
             Log::error('WhatsApp Flow Handler - Error al guardar gasto', [
                 'from' => $from,
                 'session_id' => $session->id,
                 'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
             ]);
 
             $this->messageService->sendText($from, 
                 '❌ Error al guardar el gasto. Por favor, intenta nuevamente o contacta al administrador.'
             );
+            
+            // Resetear la sesión
+            $session->update(['estado_actual' => 'CANCELLED']);
         }
     }
 
