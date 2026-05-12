@@ -175,7 +175,7 @@ class FormulaCalculatorService
                 }
             }
             
-            $total = $query->sum('monto_total');
+            $total = round($query->sum('monto_total'), 0);
             
             Log::debug('[FormulaCalculatorService] calculateSum', [
                 'type' => 'Subcategoria',
@@ -461,12 +461,20 @@ class FormulaCalculatorService
     {
         $campo = self::getCampoFromContext($parentContext);
         
+        // Redondear todos los resultados a enteros sin decimales
+        $roundedResult = round($result, 0);
+        
         if (!$campo || !$campo->tipo_resultado) {
-            return $result;
+            Log::debug('[FormulaCalculatorService] applyResultFormatting sin campo', [
+                'result_original' => $result,
+                'result_rounded' => $roundedResult
+            ]);
+            return $roundedResult;
         }
 
         Log::debug('[FormulaCalculatorService] applyResultFormatting', [
             'result_original' => $result,
+            'result_rounded' => $roundedResult,
             'tipo_resultado' => $campo->tipo_resultado,
             'campo_id' => $campo->id
         ]);
@@ -474,25 +482,20 @@ class FormulaCalculatorService
         switch ($campo->tipo_resultado) {
             case 'PORCENTAJE':
                 // Convertir a porcentaje sin decimales (ej: 0.1 -> 10)
-                $percentageValue = round($result * 100, 0);
+                $percentageValue = round($roundedResult * 100, 0);
                 Log::debug('[FormulaCalculatorService] Porcentaje formateado', [
                     'result_original' => $result,
+                    'result_rounded' => $roundedResult,
                     'percentage_value' => $percentageValue
                 ]);
                 return $percentageValue;
                 
             case 'ENTERO':
-                // Redondear a entero sin decimales
-                return round($result, 0);
-                
             case 'CURRENCY':
-                // Mantener como valor numérico para formateo en frontend
-                return round($result, 2);
-                
             case 'OTRO':
             default:
-                // Devolver el resultado original
-                return $result;
+                // Para todos los casos, devolver el valor redondeado a entero
+                return $roundedResult;
         }
     }
 
