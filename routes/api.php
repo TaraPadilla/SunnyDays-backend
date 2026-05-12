@@ -75,14 +75,14 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/generar-balance', [GastoController::class, 'generarBalance']);
     Route::post('/gastos/{id}/restore', [GastoController::class, 'restore']);
 
-    // Soportes de Gastos
+    // Soportes de Gastos (rutas fijas antes del apiResource para no capturarlas como {soporte_gasto})
+    Route::post('/soporte-gastos/upload', [SoporteGastoController::class, 'uploadFile']);
+    Route::post('/soporte-gastos/realign-for-gasto', [SoporteGastoController::class, 'realignForGasto']);
     Route::apiResource('soporte-gastos', SoporteGastoController::class);
     Route::post('/soporte-gastos/{id}/restore', [SoporteGastoController::class, 'restore']);
 
     // Balances
     Route::apiResource('balances', BalanceController::class);
     Route::post('/balances/{id}/restore', [BalanceController::class, 'restore']);
-
-    Route::post('/soporte-gastos/upload', [SoporteGastoController::class, 'uploadFile']);
 
 });

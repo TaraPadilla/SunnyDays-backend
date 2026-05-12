@@ -80,9 +80,11 @@ class SoporteGastoController extends Controller
             Log::debug('[SoporteGastoController] uploadFile: validando archivo');
             $validated = $request->validate([
                 'file' => 'required|file|max:2048', // Max 2MB
+                'inmueble_id' => 'nullable|exists:inmuebles,id'
             ]);
 
             $file = $validated['file'];
+            $inmuebleId = $request->input('inmueble_id');
             
             // Generate unique filename
             $timestamp = time();
@@ -90,12 +92,14 @@ class SoporteGastoController extends Controller
             $extension = $file->getClientOriginalExtension();
             $filename = $timestamp . '_' . str_replace(' ', '_', pathinfo($originalName, PATHINFO_FILENAME)) . '.' . $extension;
             
-            // Store file in public storage
-            $path = $file->storeAs('soportes_gastos', $filename, 'public');
+            // Store file in inmueble subfolder if provided, otherwise in main folder
+            $folder = $inmuebleId ? "soportes_gastos/inmueble_{$inmuebleId}" : 'soportes_gastos';
+            $path = $file->storeAs($folder, $filename, 'public');
             
             Log::info('[SoporteGastoController] uploadFile: archivo subido exitosamente', [
                 'original_name' => $originalName,
                 'stored_path' => $path,
+                'folder' => $folder,
                 'size' => $file->getSize(),
             ]);
 
@@ -135,6 +139,185 @@ class SoporteGastoController extends Controller
     }
 
     /**
+     * Ruta canónica bajo el disco public: sin segmentos duplicados (solo hoja basename).
+     */
+    private function canonicalSoporteArchivoPath(string $relativePath, ?int $inmuebleId): string
+    {
+        $relativePath = str_replace('\\', '/', trim($relativePath));
+        $leaf = basename($relativePath);
+
+        if ($inmuebleId) {
+            return "soportes_gastos/inmueble_{$inmuebleId}/{$leaf}";
+        }
+
+        return 'soportes_gastos/'.$leaf;
+    }
+
+    /**
+     * Alinea el archivo en disco con la carpeta del inmueble del gasto (migración progresiva).
+     * Sin inmueble en el gasto: no hace nada. Solo hoja bajo soportes_gastos/inmueble_{id}/ (corrige rutas duplicadas en BD o en disco).
+     *
+     * @return string clave para contadores (moved|skipped_already_aligned|skipped_no_inmueble|skipped_missing_file|failed)
+     */
+    private function alignSoporteArchivoToGastoInmueble(SoporteGasto $soporte): string
+    {
+        $soporte->loadMissing('gasto');
+        $gasto = $soporte->gasto;
+        if (! $gasto || ! $gasto->inmueble_id) {
+            return 'skipped_no_inmueble';
+        }
+
+        $inmuebleId = (int) $gasto->inmueble_id;
+        $rel = str_replace('\\', '/', trim($soporte->archivo));
+
+        if (str_contains($rel, '..') || ! str_starts_with($rel, 'soportes_gastos/')) {
+            Log::warning('[SoporteGastoController] alignSoporte: ruta inválida', [
+                'soporte_id' => $soporte->id,
+                'archivo' => $rel,
+            ]);
+
+            return 'failed';
+        }
+
+        $canonicalRel = $this->canonicalSoporteArchivoPath($rel, $inmuebleId);
+        $targetDir = "soportes_gastos/inmueble_{$inmuebleId}";
+
+        if ($rel === $canonicalRel) {
+            return 'skipped_already_aligned';
+        }
+
+        $disk = Storage::disk('public');
+
+        // Archivo ya en la ruta canónica en disco; solo corregir registro (p. ej. ruta duplicada en BD)
+        if (! $disk->exists($rel) && $disk->exists($canonicalRel)) {
+            $soporte->archivo = $canonicalRel;
+            $soporte->save();
+
+            Log::info('[SoporteGastoController] alignSoporte: ruta en BD normalizada (archivo ya en destino)', [
+                'soporte_id' => $soporte->id,
+                'from' => $rel,
+                'to' => $canonicalRel,
+            ]);
+
+            return 'moved';
+        }
+
+        if (! $disk->exists($rel)) {
+            Log::warning('[SoporteGastoController] alignSoporte: archivo no encontrado en disco', [
+                'soporte_id' => $soporte->id,
+                'archivo' => $rel,
+            ]);
+
+            return 'skipped_missing_file';
+        }
+
+        $targetRel = $canonicalRel;
+        if ($disk->exists($targetRel) && $rel !== $targetRel) {
+            $leaf = time().'_'.basename($rel);
+            $targetRel = "{$targetDir}/{$leaf}";
+        }
+
+        if ($rel === $targetRel) {
+            return 'skipped_already_aligned';
+        }
+
+        try {
+            $disk->makeDirectory($targetDir);
+            $disk->move($rel, $targetRel);
+        } catch (\Throwable $e) {
+            Log::error('[SoporteGastoController] alignSoporte: error al mover', [
+                'message' => $e->getMessage(),
+                'soporte_id' => $soporte->id,
+                'from' => $rel,
+                'to' => $targetRel,
+            ]);
+
+            return 'failed';
+        }
+
+        $soporte->archivo = $targetRel;
+        $soporte->save();
+
+        Log::info('[SoporteGastoController] alignSoporte: archivo movido', [
+            'soporte_id' => $soporte->id,
+            'from' => $rel,
+            'to' => $targetRel,
+            'inmueble_id' => $inmuebleId,
+        ]);
+
+        return 'moved';
+    }
+
+    /**
+     * Reubica en disco todos los soportes de un gasto según el inmueble actual del gasto (sin subir archivos nuevos).
+     */
+    public function realignForGasto(Request $request): JsonResponse
+    {
+        Log::info('[SoporteGastoController] realignForGasto: petición recibida', [
+            'keys' => array_keys($request->all()),
+        ]);
+
+        try {
+            $validated = $request->validate([
+                'gasto_id' => 'required|exists:gastos,id',
+            ]);
+
+            $gastoId = (int) $validated['gasto_id'];
+            $soportes = SoporteGasto::with('gasto')->where('gasto_id', $gastoId)->get();
+
+            $counts = [
+                'moved' => 0,
+                'skipped_already_aligned' => 0,
+                'skipped_no_inmueble' => 0,
+                'skipped_missing_file' => 0,
+                'failed' => 0,
+            ];
+
+            foreach ($soportes as $soporte) {
+                $status = $this->alignSoporteArchivoToGastoInmueble($soporte);
+                if (isset($counts[$status])) {
+                    $counts[$status]++;
+                } else {
+                    $counts['failed']++;
+                }
+            }
+
+            Log::info('[SoporteGastoController] realignForGasto: completado', [
+                'gasto_id' => $gastoId,
+                'counts' => $counts,
+            ]);
+
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Alineación de archivos de soporte completada',
+                'data' => [
+                    'gasto_id' => $gastoId,
+                    'processed' => $soportes->count(),
+                    'counts' => $counts,
+                ],
+            ], 200);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Error en la validación',
+                'errors' => $e->errors(),
+            ], 422);
+        } catch (\Exception $e) {
+            Log::error('[SoporteGastoController] realignForGasto: excepción', [
+                'message' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
+
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Error al alinear archivos de soporte',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
      * Store a newly created resource in storage.
      */
     public function store(Request $request): JsonResponse
@@ -149,11 +332,33 @@ class SoporteGastoController extends Controller
             Log::debug('[SoporteGastoController] store: validando entrada');
             $validated = $request->validate([
                 'gasto_id' => 'required|exists:gastos,id',
-                'archivo' => 'required|string|max:255',
+                'archivo' => 'required|string|max:500',
                 'nombre_original' => 'nullable|string|max:255',
                 'mime_type' => 'nullable|string|max:100'
             ]);
 
+            $gasto = \App\Models\Gasto::find($validated['gasto_id']);
+            $inmuebleId = $gasto ? $gasto->inmueble_id : null;
+
+            $archivoInput = str_replace('\\', '/', trim($validated['archivo']));
+            if (str_contains($archivoInput, '..')) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Ruta de archivo inválida',
+                ], 422);
+            }
+
+            // Siempre ruta canónica (evita soportes_gastos/inmueble_X/soportes_gastos/...)
+            $validated['archivo'] = $this->canonicalSoporteArchivoPath(
+                $archivoInput,
+                $inmuebleId ? (int) $inmuebleId : null
+            );
+
+            Log::debug('[SoporteGastoController] store: ruta archivo normalizada', [
+                'archivo' => $validated['archivo'],
+                'gasto_id' => $validated['gasto_id'],
+            ]);
+            
             Log::debug('[SoporteGastoController] store: validación OK, creando registro');
             $soporte = SoporteGasto::create($validated);
             $soporte->load(['gasto']);
@@ -210,10 +415,7 @@ class SoporteGastoController extends Controller
                 ], 404);
             }
 
-            Log::debug('[SoporteGastoController] show: cargando relaciones');
             $soporteGasto->load(['gasto']);
-
-            Log::info('[SoporteGastoController] show: éxito', ['soporte_id' => $soporteGasto->id]);
 
             return response()->json([
                 'status' => 'success',
@@ -243,33 +445,35 @@ class SoporteGastoController extends Controller
     {
         Log::info('[SoporteGastoController] update: petición recibida', [
             'soporte_id' => $soporteGasto->id,
-            'trashed' => $soporteGasto->trashed(),
             'keys' => array_keys($request->all()),
         ]);
 
         try {
             if ($soporteGasto->trashed()) {
-                Log::notice('[SoporteGastoController] update: intento sobre soporte eliminado, 404', ['soporte_id' => $soporteGasto->id]);
-
                 return response()->json([
                     'status' => 'error',
-                    'message' => 'No se puede actualizar un soporte de gasto eliminado'
+                    'message' => 'El soporte de gasto no existe o ha sido eliminado'
                 ], 404);
             }
 
-            Log::debug('[SoporteGastoController] update: validando entrada');
             $validated = $request->validate([
-                'gasto_id' => 'required|exists:gastos,id',
-                'archivo' => 'required|string|max:255',
                 'nombre_original' => 'nullable|string|max:255',
-                'mime_type' => 'nullable|string|max:100'
+                'mime_type' => 'nullable|string|max:100',
+                'relocate_to_gasto_inmueble' => 'sometimes|boolean',
             ]);
 
-            Log::debug('[SoporteGastoController] update: validación OK, persistiendo');
-            $soporteGasto->update($validated);
-            $soporteGasto->load(['gasto']);
+            if (! empty($validated['relocate_to_gasto_inmueble'])) {
+                $this->alignSoporteArchivoToGastoInmueble($soporteGasto);
+                $soporteGasto->refresh();
+            }
 
-            Log::info('[SoporteGastoController] update: éxito', ['soporte_id' => $soporteGasto->id]);
+            unset($validated['relocate_to_gasto_inmueble']);
+            $payload = array_filter($validated, fn ($v) => $v !== null);
+            if ($payload !== []) {
+                $soporteGasto->update($payload);
+            }
+
+            $soporteGasto->load(['gasto']);
 
             return response()->json([
                 'status' => 'success',
@@ -277,11 +481,6 @@ class SoporteGastoController extends Controller
                 'data' => new SoporteGastoResource($soporteGasto)
             ], 200);
         } catch (\Illuminate\Validation\ValidationException $e) {
-            Log::warning('[SoporteGastoController] update: validación fallida', [
-                'soporte_id' => $soporteGasto->id,
-                'errors' => $e->errors(),
-            ]);
-
             return response()->json([
                 'status' => 'error',
                 'message' => 'Error en la validación',
