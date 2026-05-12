@@ -13,6 +13,40 @@ use Illuminate\Http\UploadedFile;
 class SoporteGastoController extends Controller
 {
     /**
+     * Descarga el archivo de un soporte por la API (misma política CORS que /api; evita fetch cross-origin a /storage).
+     */
+    public function download(int $id)
+    {
+        try {
+            $soporte = SoporteGasto::query()->findOrFail($id);
+
+            $path = str_replace('\\', '/', trim($soporte->archivo));
+            if (str_contains($path, '..') || ! str_starts_with($path, 'soportes_gastos/')) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Ruta de archivo inválida',
+                ], 422);
+            }
+
+            if (! Storage::disk('public')->exists($path)) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Archivo no encontrado en el servidor',
+                ], 404);
+            }
+
+            $downloadName = $soporte->nombre_original ?: basename($path);
+
+            return Storage::disk('public')->download($path, $downloadName);
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Soporte no encontrado',
+            ], 404);
+        }
+    }
+
+    /**
      * Display a listing of the resource.
      */
     public function index(Request $request): JsonResponse
