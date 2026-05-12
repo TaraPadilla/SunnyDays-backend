@@ -9,9 +9,135 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Http\UploadedFile;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
+use ZipArchive;
 
 class SoporteGastoController extends Controller
 {
+    /**
+     * Nombre seguro para entrada dentro del ZIP.
+     */
+    private function sanitizeZipEntryLeaf(string $name, int $soporteId, string $archivoBasename): string
+    {
+        $base = $name !== '' ? basename(str_replace('\\', '/', $name)) : $archivoBasename;
+        $base = preg_replace('/[^a-zA-Z0-9._\-]/', '_', $base) ?? 'archivo';
+        $base = trim($base, '._');
+        if ($base === '' || $base === '.' || $base === '..') {
+            $base = 'soporte_'.$soporteId;
+        }
+
+        return substr($base, 0, 180);
+    }
+
+    /**
+     * Descarga un ZIP con todos los soportes en disco de los gastos indicados (p. ej. filtro del listado).
+     */
+    public function zipPorGastos(Request $request): BinaryFileResponse|JsonResponse
+    {
+        if (! class_exists(ZipArchive::class)) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'La extensión ZIP de PHP no está disponible en el servidor.',
+            ], 500);
+        }
+
+        try {
+            $validated = $request->validate([
+                'gasto_ids' => 'required|array|min:1|max:500',
+                'gasto_ids.*' => 'integer|exists:gastos,id',
+            ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Error en la validación',
+                'errors' => $e->errors(),
+            ], 422);
+        }
+
+        $gastoIds = array_values(array_unique(array_map('intval', $validated['gasto_ids'])));
+
+        $soportes = SoporteGasto::query()
+            ->whereIn('gasto_id', $gastoIds)
+            ->orderBy('gasto_id')
+            ->orderBy('id')
+            ->get();
+
+        if ($soportes->isEmpty()) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Los gastos indicados no tienen archivos de soporte registrados.',
+            ], 422);
+        }
+
+        $tempDir = storage_path('app/temp');
+        if (! is_dir($tempDir)) {
+            mkdir($tempDir, 0755, true);
+        }
+
+        $zipBase = 'soportes_gastos_'.date('Ymd_His').'_'.uniqid('', true).'.zip';
+        $zipFullPath = $tempDir.DIRECTORY_SEPARATOR.$zipBase;
+
+        $zip = new ZipArchive;
+        if ($zip->open($zipFullPath, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
+            Log::error('[SoporteGastoController] zipPorGastos: no se pudo crear ZIP', ['path' => $zipFullPath]);
+
+            return response()->json([
+                'status' => 'error',
+                'message' => 'No se pudo crear el archivo ZIP.',
+            ], 500);
+        }
+
+        $disk = Storage::disk('public');
+        $added = 0;
+
+        foreach ($soportes as $soporte) {
+            $rel = str_replace('\\', '/', trim($soporte->archivo));
+            if (str_contains($rel, '..') || ! str_starts_with($rel, 'soportes_gastos/')) {
+                continue;
+            }
+            if (! $disk->exists($rel)) {
+                continue;
+            }
+            $localPath = $disk->path($rel);
+            if (! is_readable($localPath)) {
+                continue;
+            }
+
+            $archivoBasename = basename($rel);
+            $leaf = $this->sanitizeZipEntryLeaf(
+                (string) ($soporte->nombre_original ?? ''),
+                $soporte->id,
+                $archivoBasename
+            );
+            $entry = 'gasto_'.$soporte->gasto_id.'/soporte_'.$soporte->id.'_'.$leaf;
+            if ($zip->addFile($localPath, $entry)) {
+                $added++;
+            }
+        }
+
+        $zip->close();
+
+        if ($added === 0) {
+            if (is_file($zipFullPath)) {
+                @unlink($zipFullPath);
+            }
+
+            return response()->json([
+                'status' => 'error',
+                'message' => 'No se encontró ningún archivo en disco para los soportes de estos gastos.',
+            ], 422);
+        }
+
+        Log::info('[SoporteGastoController] zipPorGastos: ZIP generado', [
+            'gastos' => count($gastoIds),
+            'archivos' => $added,
+        ]);
+
+        $downloadName = 'soportes_gastos_filtrados_'.date('Y-m-d_His').'.zip';
+
+        return response()->download($zipFullPath, $downloadName)->deleteFileAfterSend(true);
+    }
+
     /**
      * Descarga el archivo de un soporte por la API (misma política CORS que /api; evita fetch cross-origin a /storage).
      */

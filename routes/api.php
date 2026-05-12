@@ -78,6 +78,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // Soportes de Gastos (rutas fijas antes del apiResource para no capturarlas como {soporte_gasto})
     Route::post('/soporte-gastos/upload', [SoporteGastoController::class, 'uploadFile']);
     Route::post('/soporte-gastos/realign-for-gasto', [SoporteGastoController::class, 'realignForGasto']);
+    Route::post('/soporte-gastos/zip-por-gastos', [SoporteGastoController::class, 'zipPorGastos']);
     Route::get('/soporte-gastos/{id}/download', [SoporteGastoController::class, 'download'])->whereNumber('id');
     Route::apiResource('soporte-gastos', SoporteGastoController::class);
     Route::post('/soporte-gastos/{id}/restore', [SoporteGastoController::class, 'restore']);
