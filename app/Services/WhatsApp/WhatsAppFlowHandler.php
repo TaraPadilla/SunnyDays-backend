@@ -297,6 +297,10 @@ class WhatsAppFlowHandler
     public function sendNextStepMessage(string $from, WhatsAppSession $session): void
     {
         switch ($session->estado_actual) {
+            case 'SELECTING_PROVIDER':
+                $this->sendProviderRequest($from);
+                break;
+
             case 'SELECTING_DATE':
                 // Reenviar mensaje de selección de fecha
                 $this->sendInitialMessage($from);
@@ -396,6 +400,28 @@ class WhatsAppFlowHandler
                 $this->sendInitialMessage($from);
                 $session->update(['estado_actual' => 'SELECTING_DATE']);
                 break;
+        }
+    }
+
+    /**
+     * Send provider/name request
+     */
+    public function sendProviderRequest(string $to): void
+    {
+        $message = "Por favor, ingresa tu nombre para iniciar el registro del gasto.\n\n" .
+                   "*Puedes escribir CANCELAR en cualquier momento para cancelar el proceso*";
+
+        $response = $this->messageService->sendText($to, $message);
+
+        if ($response) {
+            Log::info('WhatsApp Flow Handler - Solicitud de proveedor enviada', [
+                'to' => $to,
+                'response_status' => $response['status'],
+            ]);
+        } else {
+            Log::error('WhatsApp Flow Handler - Error al enviar solicitud de proveedor', [
+                'to' => $to,
+            ]);
         }
     }
 

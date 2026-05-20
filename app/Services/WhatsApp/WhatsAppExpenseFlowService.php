@@ -271,7 +271,9 @@ class WhatsAppExpenseFlowService
                 // Actualizar timestamp y manejar según estado
                 $existingSession->update(['ultimo_mensaje_at' => Carbon::now()]);
                 
-                if ($existingSession->estado_actual === 'SELECTING_DATE') {
+                if ($existingSession->estado_actual === 'SELECTING_PROVIDER') {
+                    $this->handleProviderInput($from, $messageText, $existingSession);
+                } elseif ($existingSession->estado_actual === 'SELECTING_DATE') {
                     // Manejar entrada de fecha (puede ser por botones o texto)
                     if (!is_numeric($messageText) && strlen($messageText) > 2) {
                         // Es texto largo, probablemente una fecha manual
@@ -386,7 +388,7 @@ class WhatsAppExpenseFlowService
     {
         $newSession = WhatsAppSession::create([
             'wa_id' => $from,
-            'estado_actual' => 'STARTED',
+            'estado_actual' => 'SELECTING_PROVIDER',
             'ultimo_mensaje_at' => Carbon::now(),
         ]);
 
@@ -395,9 +397,37 @@ class WhatsAppExpenseFlowService
             'session_id' => $newSession->id,
         ]);
 
-        // Enviar mensaje inicial y actualizar estado
+        // Enviar primer paso del flujo
+        $this->flowHandler->sendProviderRequest($from);
+    }
+
+    /**
+     * Handle provider/name input from user
+     */
+    private function handleProviderInput(string $from, ?string $messageText, WhatsAppSession $session): void
+    {
+        $provider = preg_replace('/\s+/', ' ', trim((string) $messageText));
+
+        if ($provider === '') {
+            $this->whatsAppMessageService->sendText($from,
+                'Por favor, ingresa tu nombre para continuar con el registro del gasto.'
+            );
+            return;
+        }
+
+        $session->update([
+            'proveedor' => substr($provider, 0, 255),
+            'estado_actual' => 'SELECTING_DATE',
+        ]);
+
+        Log::info('WhatsApp Expense Flow - Proveedor registrado', [
+            'from' => $from,
+            'session_id' => $session->id,
+            'proveedor' => $provider,
+        ]);
+
+        $this->whatsAppMessageService->sendText($from, "Gracias, {$provider}.");
         $this->flowHandler->sendInitialMessage($from);
-        $newSession->update(['estado_actual' => 'SELECTING_DATE']);
     }
 
     /**

@@ -24,6 +24,7 @@ class WhatsAppSession extends Model
      */
     protected $fillable = [
         'wa_id',
+        'proveedor',
         'estado_actual',
         'fecha_gasto',
         'inmueble_id',
