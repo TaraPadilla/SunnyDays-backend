@@ -25,6 +25,7 @@ class WhatsAppSession extends Model
     protected $fillable = [
         'wa_id',
         'proveedor',
+        'gasto_id',
         'estado_actual',
         'fecha_gasto',
         'inmueble_id',
@@ -74,5 +75,13 @@ class WhatsAppSession extends Model
     public function categoriaGasto()
     {
         return $this->belongsTo(Categoria::class, 'categoria_gasto_id');
+    }
+
+    /**
+     * Get the expense created during the WhatsApp flow.
+     */
+    public function gasto()
+    {
+        return $this->belongsTo(Gasto::class);
     }
 }
