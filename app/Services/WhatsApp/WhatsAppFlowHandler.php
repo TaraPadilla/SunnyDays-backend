@@ -6,9 +6,12 @@ use App\Models\WhatsAppSession;
 use App\Models\Inmueble;
 use App\Models\Categoria;
 use App\Models\Subcategoria;
+use App\Models\SoporteGasto;
 use App\Http\Controllers\InmuebleController;
 use App\Http\Controllers\CategoriaController;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 use Carbon\Carbon;
 
 class WhatsAppFlowHandler
@@ -483,7 +486,7 @@ class WhatsAppFlowHandler
     {
         $this->messageService->sendText($to,
             "Envía una imagen o PDF del comprobante.\n\n" .
-            "Puedes escribir CANCELAR para cancelar el proceso."
+            "Si no deseas adjuntarlo, escribe OMITIR."
         );
     }
 
@@ -516,6 +519,148 @@ class WhatsAppFlowHandler
             'Opción inválida. Por favor, selecciona Sí o No.'
         );
         $this->sendSupportQuestion($from);
+    }
+
+    /**
+     * Download and attach the WhatsApp support media to the created expense.
+     */
+    public function handleSupportMedia(
+        string $from,
+        string $messageType,
+        string $mediaId,
+        ?string $mimeType,
+        ?string $filename,
+        WhatsAppSession $session
+    ): void {
+        if ($session->estado_actual !== 'WAITING_SUPPORT_FILE') {
+            Log::warning('WhatsApp Flow Handler - Archivo recibido en estado incorrecto', [
+                'from' => $from,
+                'message_type' => $messageType,
+                'media_id' => $mediaId,
+                'estado_actual' => $session->estado_actual,
+            ]);
+            return;
+        }
+
+        if (!$session->gasto_id) {
+            $this->messageService->sendText($from,
+                'No encontré el gasto asociado a este comprobante. Por favor, inicia el proceso nuevamente.'
+            );
+            $session->update(['estado_actual' => 'CANCELLED']);
+            return;
+        }
+
+        $accessToken = config('services.whatsapp.access_token');
+        if (!$accessToken) {
+            Log::error('WhatsApp Flow Handler - Access token no configurado para descargar media');
+            $this->messageService->sendText($from,
+                'No pude descargar el comprobante por configuración incompleta. Contacta al administrador.'
+            );
+            return;
+        }
+
+        $mediaInfoResponse = Http::withToken($accessToken)
+            ->get("https://graph.facebook.com/v25.0/{$mediaId}");
+
+        if (!$mediaInfoResponse->successful()) {
+            Log::error('WhatsApp Flow Handler - Error consultando media en Meta', [
+                'media_id' => $mediaId,
+                'status' => $mediaInfoResponse->status(),
+                'body' => $mediaInfoResponse->body(),
+            ]);
+            $this->messageService->sendText($from,
+                'No pude obtener el comprobante desde WhatsApp. Intenta enviarlo nuevamente.'
+            );
+            return;
+        }
+
+        $mediaInfo = $mediaInfoResponse->json();
+        $downloadUrl = $mediaInfo['url'] ?? null;
+        $resolvedMimeType = $mediaInfo['mime_type'] ?? $mimeType;
+        $fileSize = (int) ($mediaInfo['file_size'] ?? 0);
+        $maxBytes = 2 * 1024 * 1024;
+
+        if (!$downloadUrl) {
+            $this->messageService->sendText($from,
+                'No pude obtener la URL del comprobante. Intenta enviarlo nuevamente.'
+            );
+            return;
+        }
+
+        if ($fileSize > $maxBytes) {
+            $this->messageService->sendText($from,
+                'El comprobante supera el tamaño máximo permitido de 2MB. Envía una imagen o PDF más liviano.'
+            );
+            return;
+        }
+
+        $extension = $this->getSupportExtension($messageType, $resolvedMimeType);
+        if (!$extension) {
+            $this->messageService->sendText($from,
+                'Formato no permitido. Envía únicamente una imagen JPG/PNG/WEBP o un PDF.'
+            );
+            return;
+        }
+
+        $downloadResponse = Http::withToken($accessToken)->get($downloadUrl);
+        if (!$downloadResponse->successful()) {
+            Log::error('WhatsApp Flow Handler - Error descargando media de Meta', [
+                'media_id' => $mediaId,
+                'status' => $downloadResponse->status(),
+                'body' => $downloadResponse->body(),
+            ]);
+            $this->messageService->sendText($from,
+                'No pude descargar el comprobante. Intenta enviarlo nuevamente.'
+            );
+            return;
+        }
+
+        $contents = $downloadResponse->body();
+        if (strlen($contents) > $maxBytes) {
+            $this->messageService->sendText($from,
+                'El comprobante supera el tamaño máximo permitido de 2MB. Envía una imagen o PDF más liviano.'
+            );
+            return;
+        }
+
+        $gasto = \App\Models\Gasto::find($session->gasto_id);
+        if (!$gasto) {
+            $this->messageService->sendText($from,
+                'No encontré el gasto asociado a este comprobante. Por favor, contacta al administrador.'
+            );
+            $session->update(['estado_actual' => 'CANCELLED']);
+            return;
+        }
+
+        $folder = $gasto->inmueble_id
+            ? "soportes_gastos/inmueble_{$gasto->inmueble_id}"
+            : 'soportes_gastos';
+
+        $originalName = $filename ?: "whatsapp_{$mediaId}.{$extension}";
+        $safeName = $this->sanitizeSupportFilename($originalName, $extension);
+        $storedName = time() . '_' . substr($mediaId, -12) . '_' . $safeName;
+        $path = "{$folder}/{$storedName}";
+
+        Storage::disk('public')->put($path, $contents);
+
+        SoporteGasto::create([
+            'gasto_id' => $gasto->id,
+            'archivo' => $path,
+            'nombre_original' => $originalName,
+            'mime_type' => $resolvedMimeType,
+        ]);
+
+        Log::info('WhatsApp Flow Handler - Soporte guardado exitosamente', [
+            'from' => $from,
+            'session_id' => $session->id,
+            'gasto_id' => $gasto->id,
+            'path' => $path,
+            'mime_type' => $resolvedMimeType,
+            'size' => strlen($contents),
+        ]);
+
+        $this->messageService->sendText($from, '✅ Comprobante adjuntado correctamente.');
+        $this->completeExpenseFlow($from, $session->fresh(), true);
     }
 
     /**
@@ -866,7 +1011,7 @@ class WhatsAppFlowHandler
     /**
      * Complete the flow and send the final expense confirmation.
      */
-    public function completeExpenseFlow(string $from, WhatsAppSession $session): void
+    public function completeExpenseFlow(string $from, WhatsAppSession $session, bool $supportAttached = false): void
     {
         $session->update([
             'estado_actual' => 'COMPLETED',
@@ -874,9 +1019,12 @@ class WhatsAppFlowHandler
         ]);
 
         $fechaFormateada = \Carbon\Carbon::parse($session->fecha_gasto)->format('d/m/Y');
+        $supportLine = $supportAttached ? "📎 Comprobante: Adjuntado\n" : '';
+
         $confirmationMessage = "✅ *Gasto registrado exitosamente*\n\n" .
                                "📅 Fecha: {$fechaFormateada}\n" .
                                "👤 Proveedor: " . ($session->proveedor ?: 'No registrado') . "\n" .
+                               $supportLine .
                                "💰 Monto sin IVA: $" . number_format($session->monto_sin_iva, 0, ',', '.') . "\n" .
                                "💵 IVA: $" . number_format($session->iva ?? 0, 0, ',', '.') . "\n" .
                                "💰 Monto total: $" . number_format($session->monto_total, 0, ',', '.') . "\n" .
@@ -988,5 +1136,45 @@ class WhatsAppFlowHandler
         $amount = (float) $cleanInput;
         
         return $amount > 0 ? $amount : null;
+    }
+
+    /**
+     * Return allowed support extension for a WhatsApp media message.
+     */
+    private function getSupportExtension(string $messageType, ?string $mimeType): ?string
+    {
+        $mimeType = strtolower((string) $mimeType);
+
+        if ($messageType === 'document') {
+            return $mimeType === 'application/pdf' ? 'pdf' : null;
+        }
+
+        if ($messageType !== 'image') {
+            return null;
+        }
+
+        return match ($mimeType) {
+            'image/jpeg', 'image/jpg' => 'jpg',
+            'image/png' => 'png',
+            'image/webp' => 'webp',
+            default => null,
+        };
+    }
+
+    /**
+     * Sanitize uploaded support filename while keeping the expected extension.
+     */
+    private function sanitizeSupportFilename(string $filename, string $extension): string
+    {
+        $leaf = basename(str_replace('\\', '/', $filename));
+        $name = pathinfo($leaf, PATHINFO_FILENAME);
+        $name = preg_replace('/[^a-zA-Z0-9._-]/', '_', $name) ?? 'comprobante';
+        $name = trim($name, '._-');
+
+        if ($name === '') {
+            $name = 'comprobante';
+        }
+
+        return substr($name, 0, 120) . '.' . $extension;
     }
 }

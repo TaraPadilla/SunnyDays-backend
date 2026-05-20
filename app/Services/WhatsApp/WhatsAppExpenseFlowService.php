@@ -219,6 +219,64 @@ class WhatsAppExpenseFlowService
     }
 
     /**
+     * Handle incoming media messages (images, documents)
+     */
+    public function handleMediaMessage(
+        string $from,
+        string $messageType,
+        string $mediaId,
+        ?string $mimeType,
+        ?string $filename
+    ): void {
+        Log::info('WhatsApp Expense Flow - Mensaje media recibido', [
+            'from' => $from,
+            'message_type' => $messageType,
+            'media_id' => $mediaId,
+            'mime_type' => $mimeType,
+            'filename' => $filename,
+        ]);
+
+        $activeSession = WhatsAppSession::where('wa_id', $from)
+            ->whereNull('completed_at')
+            ->first();
+
+        if (!$activeSession) {
+            $this->whatsAppMessageService->sendText($from,
+                'No hay ningún proceso activo para adjuntar un comprobante.'
+            );
+            return;
+        }
+
+        if ($this->isSessionExpired($activeSession)) {
+            $activeSession->update([
+                'estado_actual' => 'CANCELLED',
+                'completed_at' => now(),
+            ]);
+
+            $this->whatsAppMessageService->sendText($from,
+                'Tu sesión ha expirado por inactividad. Vamos a empezar de nuevo.'
+            );
+            $this->createNewSessionAndStart($from);
+            return;
+        }
+
+        $activeSession->update(['ultimo_mensaje_at' => Carbon::now()]);
+
+        if ($activeSession->estado_actual !== 'WAITING_SUPPORT_FILE') {
+            if ($activeSession->estado_actual === 'SELECTING_SUPPORT') {
+                $this->flowHandler->sendSupportQuestion($from);
+            } else {
+                $this->whatsAppMessageService->sendText($from,
+                    'No estoy esperando un archivo en este momento.'
+                );
+            }
+            return;
+        }
+
+        $this->flowHandler->handleSupportMedia($from, $messageType, $mediaId, $mimeType, $filename, $activeSession);
+    }
+
+    /**
      * Handle text messages (start new flow or manual input)
      */
     public function handleTextMessage(string $from, ?string $messageText): void
@@ -322,8 +380,12 @@ class WhatsAppExpenseFlowService
                     // En este estado se manejan botones, no texto. Si llega texto, reenviar botones.
                     $this->flowHandler->sendNextStepMessage($from, $existingSession);
                 } elseif ($existingSession->estado_actual === 'WAITING_SUPPORT_FILE') {
-                    // El procesamiento real de archivos se implementa con mensajes media.
-                    $this->flowHandler->sendSupportFileRequest($from);
+                    if ($this->isSkipSupportCommand($messageText)) {
+                        $this->flowHandler->completeExpenseFlow($from, $existingSession);
+                    } else {
+                        // El procesamiento real de archivos se implementa con mensajes media.
+                        $this->flowHandler->sendSupportFileRequest($from);
+                    }
                 } else {
                     // Para otros estados, enviar mensaje correspondiente
                     $this->flowHandler->sendNextStepMessage($from, $existingSession);
@@ -354,6 +416,20 @@ class WhatsAppExpenseFlowService
         }
 
         return false;
+    }
+
+    /**
+     * Check if the user wants to skip attaching a support file.
+     */
+    private function isSkipSupportCommand(?string $messageText): bool
+    {
+        if (!$messageText) {
+            return false;
+        }
+
+        $cleanText = strtolower(trim($messageText));
+
+        return in_array($cleanText, ['omitir', 'no', 'sin soporte', 'sin comprobante'], true);
     }
 
     /**

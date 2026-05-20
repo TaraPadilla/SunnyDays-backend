@@ -116,6 +116,9 @@ class WhatsAppWebhookController extends Controller
             $messageText = null;
             $buttonId = null;
             $buttonTitle = null;
+            $mediaId = null;
+            $mediaMimeType = null;
+            $mediaFilename = null;
 
             if ($messageType === 'text') {
                 $messageText = data_get($payload, 'entry.0.changes.0.value.messages.0.text.body');
@@ -128,6 +131,13 @@ class WhatsAppWebhookController extends Controller
                     $buttonId = data_get($payload, 'entry.0.changes.0.value.messages.0.interactive.list_reply.id');
                     $buttonTitle = data_get($payload, 'entry.0.changes.0.value.messages.0.interactive.list_reply.title');
                 }
+            } elseif ($messageType === 'image') {
+                $mediaId = data_get($payload, 'entry.0.changes.0.value.messages.0.image.id');
+                $mediaMimeType = data_get($payload, 'entry.0.changes.0.value.messages.0.image.mime_type');
+            } elseif ($messageType === 'document') {
+                $mediaId = data_get($payload, 'entry.0.changes.0.value.messages.0.document.id');
+                $mediaMimeType = data_get($payload, 'entry.0.changes.0.value.messages.0.document.mime_type');
+                $mediaFilename = data_get($payload, 'entry.0.changes.0.value.messages.0.document.filename');
             }
 
             Log::info('WhatsApp Webhook - Datos del mensaje', [
@@ -140,14 +150,25 @@ class WhatsAppWebhookController extends Controller
                 'message_text' => $messageText,
                 'button_id' => $buttonId,
                 'button_title' => $buttonTitle,
+                'media_id' => $mediaId,
+                'media_mime_type' => $mediaMimeType,
+                'media_filename' => $mediaFilename,
             ]);
 
             // Delegar manejo del flujo conversacional al servicio especializado
-            if ($from && ($messageType === 'text' || $messageType === 'interactive')) {
+            if ($from && in_array($messageType, ['text', 'interactive', 'image', 'document'])) {
                 if ($messageType === 'text' && $messageText) {
                     $this->whatsAppExpenseFlowService->handleTextMessage($from, $messageText);
                 } elseif ($messageType === 'interactive' && $buttonId && $buttonTitle) {
                     $this->whatsAppExpenseFlowService->handleInteractiveMessage($from, $buttonId, $buttonTitle);
+                } elseif (in_array($messageType, ['image', 'document']) && $mediaId) {
+                    $this->whatsAppExpenseFlowService->handleMediaMessage(
+                        $from,
+                        $messageType,
+                        $mediaId,
+                        $mediaMimeType,
+                        $mediaFilename
+                    );
                 }
             }
         } elseif ($hasStatuses) {
