@@ -381,6 +381,14 @@ class WhatsAppFlowHandler
                 );
                 break;
                 
+            case 'SELECTING_SUPPORT':
+                $this->sendSupportQuestion($from);
+                break;
+
+            case 'WAITING_SUPPORT_FILE':
+                $this->sendSupportFileRequest($from);
+                break;
+
             case 'COMPLETED':
                 // El flujo ya está completado, no hacer nada
                 break;
@@ -450,6 +458,64 @@ class WhatsAppFlowHandler
                 'to' => $to,
             ]);
         }
+    }
+
+    /**
+     * Ask whether the user wants to attach a support file.
+     */
+    public function sendSupportQuestion(string $to): void
+    {
+        $message = "¿Deseas agregar un archivo de comprobante?\n\n" .
+                   "Puedes adjuntar una imagen o un PDF.";
+
+        $buttons = [
+            ['id' => 'SUPPORT_YES', 'title' => 'Sí'],
+            ['id' => 'SUPPORT_NO', 'title' => 'No']
+        ];
+
+        $this->messageService->sendButtons($to, $message, $buttons);
+    }
+
+    /**
+     * Ask the user to send the support file.
+     */
+    public function sendSupportFileRequest(string $to): void
+    {
+        $this->messageService->sendText($to,
+            "Envía una imagen o PDF del comprobante.\n\n" .
+            "Puedes escribir CANCELAR para cancelar el proceso."
+        );
+    }
+
+    /**
+     * Handle support confirmation buttons.
+     */
+    public function handleSupportSelection(string $from, string $buttonId, WhatsAppSession $session): void
+    {
+        if ($session->estado_actual !== 'SELECTING_SUPPORT') {
+            Log::warning('WhatsApp Flow Handler - Selección de soporte recibida en estado incorrecto', [
+                'from' => $from,
+                'button_id' => $buttonId,
+                'estado_actual' => $session->estado_actual,
+            ]);
+            return;
+        }
+
+        if ($buttonId === 'SUPPORT_NO') {
+            $this->completeExpenseFlow($from, $session);
+            return;
+        }
+
+        if ($buttonId === 'SUPPORT_YES') {
+            $session->update(['estado_actual' => 'WAITING_SUPPORT_FILE']);
+            $this->sendSupportFileRequest($from);
+            return;
+        }
+
+        $this->messageService->sendText($from,
+            'Opción inválida. Por favor, selecciona Sí o No.'
+        );
+        $this->sendSupportQuestion($from);
     }
 
     /**
@@ -782,10 +848,9 @@ class WhatsAppFlowHandler
             $observations = null;
         }
 
-        // Guardar observaciones y finalizar el proceso
+        // Guardar observaciones antes de crear el gasto
         $session->update([
             'observaciones' => $observations,
-            'estado_actual' => 'COMPLETED',
         ]);
 
         Log::info('WhatsApp Flow Handler - Observaciones ingresadas', [
@@ -796,6 +861,29 @@ class WhatsAppFlowHandler
 
         // Guardar el gasto completo
         $this->saveExpense($from, $session);
+    }
+
+    /**
+     * Complete the flow and send the final expense confirmation.
+     */
+    public function completeExpenseFlow(string $from, WhatsAppSession $session): void
+    {
+        $session->update([
+            'estado_actual' => 'COMPLETED',
+            'completed_at' => now(),
+        ]);
+
+        $fechaFormateada = \Carbon\Carbon::parse($session->fecha_gasto)->format('d/m/Y');
+        $confirmationMessage = "✅ *Gasto registrado exitosamente*\n\n" .
+                               "📅 Fecha: {$fechaFormateada}\n" .
+                               "👤 Proveedor: " . ($session->proveedor ?: 'No registrado') . "\n" .
+                               "💰 Monto sin IVA: $" . number_format($session->monto_sin_iva, 0, ',', '.') . "\n" .
+                               "💵 IVA: $" . number_format($session->iva ?? 0, 0, ',', '.') . "\n" .
+                               "💰 Monto total: $" . number_format($session->monto_total, 0, ',', '.') . "\n" .
+                               "📝 Observaciones: " . ($session->observaciones ?: 'Ninguna') . "\n\n" .
+                               "¡Gracias por usar el sistema! 🎉";
+
+        $this->messageService->sendText($from, $confirmationMessage);
     }
 
     /**
@@ -845,24 +933,14 @@ class WhatsAppFlowHandler
                 'gasto_id' => $gasto->id,
             ]);
 
-            // Marcar la sesión como completada
+            // Guardar el gasto creado en la sesión y preguntar por soporte
             $session->update([
-                'estado_actual' => 'COMPLETED',
-                'completed_at' => now(),
+                'gasto_id' => $gasto->id,
+                'estado_actual' => 'SELECTING_SUPPORT',
             ]);
 
-            // Enviar confirmación final
-            $fechaFormateada = \Carbon\Carbon::parse($session->fecha_gasto)->format('d/m/Y');
-            $confirmationMessage = "✅ *Gasto registrado exitosamente*\n\n" .
-                                   "📅 Fecha: {$fechaFormateada}\n" .
-                                   "👤 Proveedor: " . ($session->proveedor ?: 'No registrado') . "\n" .
-                                   "💰 Monto sin IVA: $" . number_format($session->monto_sin_iva, 0, ',', '.') . "\n" .
-                                   "💵 IVA: $" . number_format($session->iva ?? 0, 0, ',', '.') . "\n" .
-                                   "💰 Monto total: $" . number_format($session->monto_total, 0, ',', '.') . "\n" .
-                                   "📝 Observaciones: " . ($session->observaciones ?: 'Ninguna') . "\n\n" .
-                                   "¡Gracias por usar el sistema! 🎉";
-            
-            $this->messageService->sendText($from, $confirmationMessage);
+            $this->sendSupportQuestion($from);
+            return;
 
         } catch (\Illuminate\Validation\ValidationException $e) {
             Log::error('WhatsApp Flow Handler - Error de validación al guardar gasto', [

@@ -200,6 +200,14 @@ class WhatsAppExpenseFlowService
                 }
                 break;
                 
+            case 'SELECTING_SUPPORT':
+                $this->flowHandler->handleSupportSelection($from, $buttonId, $activeSession);
+                break;
+
+            case 'WAITING_SUPPORT_FILE':
+                $this->flowHandler->sendSupportFileRequest($from);
+                break;
+
             default:
                 Log::warning('WhatsApp Expense Flow - Botón recibido en estado no manejado', [
                     'from' => $from,
@@ -310,6 +318,12 @@ class WhatsAppExpenseFlowService
                 } elseif ($existingSession->estado_actual === 'SELECTING_OBSERVATIONS') {
                     // Manejar entrada de observaciones
                     $this->flowHandler->handleObservationsInput($from, $messageText, $existingSession);
+                } elseif ($existingSession->estado_actual === 'SELECTING_SUPPORT') {
+                    // En este estado se manejan botones, no texto. Si llega texto, reenviar botones.
+                    $this->flowHandler->sendNextStepMessage($from, $existingSession);
+                } elseif ($existingSession->estado_actual === 'WAITING_SUPPORT_FILE') {
+                    // El procesamiento real de archivos se implementa con mensajes media.
+                    $this->flowHandler->sendSupportFileRequest($from);
                 } else {
                     // Para otros estados, enviar mensaje correspondiente
                     $this->flowHandler->sendNextStepMessage($from, $existingSession);
