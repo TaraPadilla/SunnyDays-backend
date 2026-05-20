@@ -387,8 +387,8 @@ class WhatsAppFlowHandler
                 
             case 'CANCELLED':
                 // El flujo fue cancelado, reiniciar
-                $this->sendInitialMessage($from);
-                $session->update(['estado_actual' => 'SELECTING_DATE']);
+                $this->sendProviderRequest($from);
+                $session->update(['estado_actual' => 'SELECTING_PROVIDER']);
                 break;
                 
             default:
@@ -397,8 +397,8 @@ class WhatsAppFlowHandler
                     'from' => $from,
                     'estado_actual' => $session->estado_actual,
                 ]);
-                $this->sendInitialMessage($from);
-                $session->update(['estado_actual' => 'SELECTING_DATE']);
+                $this->sendProviderRequest($from);
+                $session->update(['estado_actual' => 'SELECTING_PROVIDER']);
                 break;
         }
     }
@@ -823,6 +823,7 @@ class WhatsAppFlowHandler
                 'inmueble_id' => $session->inmueble_id,
                 'categoria_id' => $session->tipo_categoria_id,
                 'subcategoria_id' => $session->categoria_gasto_id,
+                'proveedor' => $session->proveedor,
                 'monto_sin_iva' => $session->monto_sin_iva,
                 'iva' => $session->iva ?? 0,
                 'monto_total' => $session->monto_total,
@@ -854,6 +855,7 @@ class WhatsAppFlowHandler
             $fechaFormateada = \Carbon\Carbon::parse($session->fecha_gasto)->format('d/m/Y');
             $confirmationMessage = "✅ *Gasto registrado exitosamente*\n\n" .
                                    "📅 Fecha: {$fechaFormateada}\n" .
+                                   "👤 Proveedor: " . ($session->proveedor ?: 'No registrado') . "\n" .
                                    "💰 Monto sin IVA: $" . number_format($session->monto_sin_iva, 0, ',', '.') . "\n" .
                                    "💵 IVA: $" . number_format($session->iva ?? 0, 0, ',', '.') . "\n" .
                                    "💰 Monto total: $" . number_format($session->monto_total, 0, ',', '.') . "\n" .

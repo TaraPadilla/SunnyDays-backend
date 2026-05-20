@@ -79,6 +79,10 @@ class WhatsAppExpenseFlowService
 
         // Implementar lógica según el botón seleccionado y estado actual
         switch ($activeSession->estado_actual) {
+            case 'SELECTING_PROVIDER':
+                $this->flowHandler->sendProviderRequest($from);
+                break;
+
             case 'SELECTING_DATE':
                 $this->flowHandler->handleDateSelection($from, $buttonId, $activeSession);
                 break;
