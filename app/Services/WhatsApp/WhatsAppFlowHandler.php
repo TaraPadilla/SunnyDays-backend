@@ -1145,20 +1145,22 @@ class WhatsAppFlowHandler
     {
         $mimeType = strtolower((string) $mimeType);
 
-        if ($messageType === 'document') {
-            return $mimeType === 'application/pdf' ? 'pdf' : null;
+        if ($mimeType === 'application/pdf') {
+            return 'pdf';
         }
 
-        if ($messageType !== 'image') {
-            return null;
-        }
-
-        return match ($mimeType) {
+        $imageExtension = match ($mimeType) {
             'image/jpeg', 'image/jpg' => 'jpg',
             'image/png' => 'png',
             'image/webp' => 'webp',
             default => null,
         };
+
+        if ($imageExtension && in_array($messageType, ['image', 'document'], true)) {
+            return $imageExtension;
+        }
+
+        return null;
     }
 
     /**
