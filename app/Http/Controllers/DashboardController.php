@@ -90,6 +90,9 @@ class DashboardController extends Controller
                         'categoria' => $gasto->subcategoria && $gasto->subcategoria->categoria 
                             ? $gasto->subcategoria->categoria->nombre 
                             : 'Sin categoría',
+                        'subcategoria' => $gasto->subcategoria
+                            ? $gasto->subcategoria->nombre
+                            : 'Sin subcategoría',
                         'monto' => '$' . number_format($gasto->monto_total, 0, ',', '.')
                     ];
                 });
