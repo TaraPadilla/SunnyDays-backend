@@ -14,6 +14,7 @@ use App\Http\Controllers\UserController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\WhatsAppWebhookController;
+use App\Http\Middleware\PreventDemoUserWrites;
 
 /*
 |--------------------------------------------------------------------------
@@ -39,7 +40,7 @@ Route::post('/whatsapp/webhook', [WhatsAppWebhookController::class, 'receive']);
 |--------------------------------------------------------------------------
 */
 
-Route::middleware('auth:sanctum')->group(function () {
+Route::middleware(['auth:sanctum', PreventDemoUserWrites::class])->group(function () {
 
     // Usuario autenticado
     Route::get('/me', [AuthController::class, 'me']);
