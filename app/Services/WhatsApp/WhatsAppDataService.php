@@ -78,6 +78,8 @@ class WhatsAppDataService
     public function getActiveCategoriesByType(string $tipo = 'Egreso'): array
     {
         try {
+            $tipo = 'Egreso';
+
             // Crear un request simulado para el nuevo método
             $request = new \Illuminate\Http\Request();
             
@@ -95,7 +97,8 @@ class WhatsAppDataService
             // Filtrar por visible_combo (el controller ya filtra por tipo y estado)
             $categories = collect($categoriasData['data'])
                 ->filter(function ($categoria) {
-                    return $categoria['visible_combo'] === true;
+                    return ($categoria['tipo'] ?? null) === 'Egreso'
+                        && $categoria['visible_combo'] === true;
                 })
                 ->sortBy('orden')
                 ->sortBy('nombre')
@@ -116,7 +119,7 @@ class WhatsAppDataService
             Log::info('WhatsApp Data Service - Categorías obtenidas via controller (getByTipo)', [
                 'tipo' => $tipo,
                 'total' => count($categories),
-                'filtered_by' => 'tipo and visible_combo'
+                'filtered_by' => 'tipo Egreso and visible_combo'
             ]);
 
             return $categories;
@@ -152,7 +155,8 @@ class WhatsAppDataService
             // Filtrar por visible_combo (el controller ya filtra por categoría_id y estado)
             $subcategories = collect($subcategoriasData['data'])
                 ->filter(function ($subcategoria) {
-                    return $subcategoria['visible_combo'] === true;
+                    return $subcategoria['visible_combo'] === true
+                        && data_get($subcategoria, 'campo.tipo_calculo') === 'SUM';
                 })
                 ->sortBy('orden')
                 ->sortBy('nombre')
@@ -173,7 +177,7 @@ class WhatsAppDataService
             Log::info('WhatsApp Data Service - Subcategorías obtenidas via controller (getByCategoria)', [
                 'categoria_id' => $categoriaId,
                 'total' => count($subcategories),
-                'filtered_by' => 'categoria_id and visible_combo'
+                'filtered_by' => 'categoria_id, visible_combo and campo tipo_calculo SUM'
             ]);
 
             return $subcategories;
@@ -219,7 +223,10 @@ class WhatsAppDataService
     {
         try {
             $id = str_replace('CATEGORY_', '', $categoryId);
-            $category = Categoria::find($id);
+            $category = Categoria::where('tipo', 'Egreso')
+                ->where('estado', true)
+                ->where('visible_combo', true)
+                ->find($id);
             
             if (!$category) {
                 Log::warning('WhatsApp Data Service - Categoría no encontrada', [
@@ -245,7 +252,17 @@ class WhatsAppDataService
     {
         try {
             $id = str_replace('SUBCATEGORY_', '', $subcategoryId);
-            $subcategory = Subcategoria::find($id);
+            $subcategory = Subcategoria::where('estado', true)
+                ->where('visible_combo', true)
+                ->whereHas('campo', function ($query) {
+                    $query->where('tipo_calculo', 'SUM');
+                })
+                ->whereHas('categoria', function ($query) {
+                    $query->where('tipo', 'Egreso')
+                        ->where('estado', true)
+                        ->where('visible_combo', true);
+                })
+                ->find($id);
             
             if (!$subcategory) {
                 Log::warning('WhatsApp Data Service - Subcategoría no encontrada', [
