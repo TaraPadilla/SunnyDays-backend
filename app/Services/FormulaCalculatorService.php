@@ -29,7 +29,11 @@ class FormulaCalculatorService
      */
     public static function setContext(array $context): void
     {
-        self::$context = $context;
+        self::$context = [];
+
+        foreach ($context as $key => $value) {
+            self::$context[strtolower($key)] = $value;
+        }
     }
 
     /**
@@ -504,6 +508,8 @@ class FormulaCalculatorService
      */
     private static function getContextValue(string $clave): float
     {
-        return isset(self::$context[$clave]) ? (float) self::$context[$clave] : 0;
+        $claveNormalizada = strtolower($clave);
+
+        return isset(self::$context[$claveNormalizada]) ? (float) self::$context[$claveNormalizada] : 0;
     }
 }

@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Gasto;
 use App\Http\Resources\GastoResource;
 use App\Services\FormulaCalculatorService;
+use App\Services\ReservasContextService;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Log;
@@ -142,27 +143,7 @@ class GastoController extends Controller
                     'json_reservas' => $jsonReservas
                 ]);
                 
-                // Tomar directamente el total como reservas_subtotal
-                $reservasSubtotal = isset($jsonReservas['total']) ? (float) $jsonReservas['total'] : 0.0;
-                
-                // Inicializar contadores
-                $reservasNoches = 0.0;
-                $reservasSeguro = 0.0;
-                
-                // Recorrer el array de reservas para calcular noches y seguro
-                if (isset($jsonReservas['reservas']) && is_array($jsonReservas['reservas'])) {
-                    foreach ($jsonReservas['reservas'] as $reserva) {
-                        $reservasNoches += isset($reserva['noches']) ? (float) $reserva['noches'] : 0.0;
-                        $reservasSeguro += isset($reserva['seguro']) ? (float) $reserva['seguro'] : 0.0;
-                    }
-                }
-                
-                // Crear el contexto
-                $contexto = [
-                    'reservas_subtotal' => $reservasSubtotal,
-                    'reservas_noches' => $reservasNoches,
-                    'reservas_seguro' => $reservasSeguro
-                ];
+                $contexto = ReservasContextService::fromBalanceJson($jsonReservas);
                 
                 Log::info('[ContextoReservas]', $contexto);
                 
