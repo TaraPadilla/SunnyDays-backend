@@ -44,7 +44,7 @@ class GastoResource extends JsonResource
             ],
             'subcategoria' => [
                 'id' => $this->subcategoria->id,
-                'nombre' => $this->subcategoria->nombre,
+                'nombre' => ucfirst(strtolower($this->subcategoria->nombre)),
                 'campo' => $this->subcategoria->campo ? [
                     'id' => $this->subcategoria->campo->id,
                     'clave' => $this->subcategoria->campo->clave,

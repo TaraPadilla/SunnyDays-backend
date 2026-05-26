@@ -295,10 +295,17 @@ class GastoController extends Controller
                         $campo = $subcategoria->campo;
 
                         $subtotalValue = $subcategoria->subtotal();
-                        
+                        $nombreFormateado = ucfirst(strtolower($subcategoria->nombre));
+
+                        Log::info('[GastoController] generarBalance: subcategoría con gastos directos', [
+                            'subcategoria_id' => $subcategoria->id,
+                            'nombre_original' => $subcategoria->nombre,
+                            'nombre_formateado' => $nombreFormateado
+                        ]);
+
                         $balance[$categoria->id]['subcategorias'][$subcategoriaId] = [
                             'id' => $subcategoria->id,
-                            'nombre' => $subcategoria->nombre,
+                            'nombre' => $nombreFormateado,
                             'valor' => $subtotalValue,
                             'orden' => $subcategoria->orden,
                             'tipo_calculo' => $campo ? $campo->tipo_calculo : null,
@@ -311,10 +318,17 @@ class GastoController extends Controller
                         $subcategoriasOrdenadas = $categoria->subcategorias->sortBy('orden');
                         foreach ($subcategoriasOrdenadas as $subcategoria) {
                             $subtotalValue = $subcategoria->subtotal();
-                            
+                            $nombreFormateado = ucfirst(strtolower($subcategoria->nombre));
+
+                            Log::info('[GastoController] generarBalance: subcategoría de categoría compuesta', [
+                                'subcategoria_id' => $subcategoria->id,
+                                'nombre_original' => $subcategoria->nombre,
+                                'nombre_formateado' => $nombreFormateado
+                            ]);
+
                             $balance[$categoria->id]['subcategorias'][$subcategoria->id] = [
                                 'id' => $subcategoria->id,
-                                'nombre' => $subcategoria->nombre,
+                                'nombre' => $nombreFormateado,
                                 'valor' => $subtotalValue,
                                 'orden' => $subcategoria->orden,
                                 'tipo_calculo' => $subcategoria->campo ? $subcategoria->campo->tipo_calculo : null,
@@ -327,14 +341,21 @@ class GastoController extends Controller
                 // También incluir subcategorías con fórmula COMPUESTA que no tengan gastos directos
                 foreach ($categoria->subcategorias as $subcategoria) {
                     // Si la subcategoría no está en el balance pero tiene fórmula compuesta, incluirla
-                    if (!isset($balance[$categoria->id]['subcategorias'][$subcategoria->id]) && 
-                        $subcategoria->campo && 
+                    if (!isset($balance[$categoria->id]['subcategorias'][$subcategoria->id]) &&
+                        $subcategoria->campo &&
                         $subcategoria->campo->tipo_calculo === 'COMPUESTA') {
                         $subtotalValue = $subcategoria->subtotal();
-                        
+                        $nombreFormateado = ucfirst(strtolower($subcategoria->nombre));
+
+                        Log::info('[GastoController] generarBalance: subcategoría con fórmula COMPUESTA', [
+                            'subcategoria_id' => $subcategoria->id,
+                            'nombre_original' => $subcategoria->nombre,
+                            'nombre_formateado' => $nombreFormateado
+                        ]);
+
                         $balance[$categoria->id]['subcategorias'][$subcategoria->id] = [
                             'id' => $subcategoria->id,
-                            'nombre' => $subcategoria->nombre,
+                            'nombre' => $nombreFormateado,
                             'valor' => $subtotalValue,
                             'orden' => $subcategoria->orden,
                             'tipo_calculo' => $subcategoria->campo ? $subcategoria->campo->tipo_calculo : null,
