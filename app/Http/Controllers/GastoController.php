@@ -277,6 +277,11 @@ class GastoController extends Controller
                     'nombre' => $categoria->nombre,
                     'tipo' => $categoria->tipo,
                     'orden' => $categoria->orden,
+                    'campo_id' => $categoria->campo?->id,
+                    'clave' => $categoria->campo?->clave,
+                    'nombre_campo' => $categoria->campo?->nombre,
+                    'tipo_calculo' => $categoria->campo?->tipo_calculo,
+                    'formula' => $categoria->campo?->formula,
                     'tipo_resultado' => $categoria->campo ? $categoria->campo->tipo_resultado : null,
                     'subcategorias' => []
                 ];
@@ -308,7 +313,11 @@ class GastoController extends Controller
                             'nombre' => $nombreFormateado,
                             'valor' => $subtotalValue,
                             'orden' => $subcategoria->orden,
+                            'campo_id' => $campo?->id,
+                            'clave' => $campo?->clave,
+                            'nombre_campo' => $campo?->nombre,
                             'tipo_calculo' => $campo ? $campo->tipo_calculo : null,
+                            'formula' => $campo?->formula,
                             'tipo_resultado' => $campo ? $campo->tipo_resultado : null
                         ];
                     }
@@ -331,7 +340,11 @@ class GastoController extends Controller
                                 'nombre' => $nombreFormateado,
                                 'valor' => $subtotalValue,
                                 'orden' => $subcategoria->orden,
+                                'campo_id' => $subcategoria->campo?->id,
+                                'clave' => $subcategoria->campo?->clave,
+                                'nombre_campo' => $subcategoria->campo?->nombre,
                                 'tipo_calculo' => $subcategoria->campo ? $subcategoria->campo->tipo_calculo : null,
+                                'formula' => $subcategoria->campo?->formula,
                                 'tipo_resultado' => $subcategoria->campo ? $subcategoria->campo->tipo_resultado : null
                             ];
                         }
@@ -358,7 +371,11 @@ class GastoController extends Controller
                             'nombre' => $nombreFormateado,
                             'valor' => $subtotalValue,
                             'orden' => $subcategoria->orden,
+                            'campo_id' => $subcategoria->campo?->id,
+                            'clave' => $subcategoria->campo?->clave,
+                            'nombre_campo' => $subcategoria->campo?->nombre,
                             'tipo_calculo' => $subcategoria->campo ? $subcategoria->campo->tipo_calculo : null,
+                            'formula' => $subcategoria->campo?->formula,
                             'tipo_resultado' => $subcategoria->campo ? $subcategoria->campo->tipo_resultado : null
                         ];
                     }
