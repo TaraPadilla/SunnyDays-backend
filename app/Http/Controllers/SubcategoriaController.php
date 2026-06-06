@@ -23,6 +23,7 @@ class SubcategoriaController extends Controller
             $isAdmin = $user && $user->perfil === 'admin';
             
             $query = Subcategoria::where('estado', true)
+                ->where('visible_combo', true)
                 ->with(['categoria', 'campo'])
                 ->orderBy('orden');
             
@@ -76,6 +77,7 @@ class SubcategoriaController extends Controller
             
             $query = Subcategoria::where('categoria_id', $categoriaId)
                 ->where('estado', true)
+                ->where('visible_combo', true)
                 ->with(['categoria', 'campo'])
                 ->orderBy('orden')
                 ->orderBy('nombre');

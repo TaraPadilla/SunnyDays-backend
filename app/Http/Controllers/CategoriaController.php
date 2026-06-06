@@ -23,8 +23,8 @@ class CategoriaController extends Controller
             $user = auth('sanctum')->user();
             $isAdmin = $user && $user->perfil === 'admin';
             
-            $query = Categoria::where('estado', true)->with(['campo', 'subcategorias' => function($query) {
-                $query->where('estado', true)->orderBy('orden');
+            $query = Categoria::where('estado', true)->where('visible_combo', true)->with(['campo', 'subcategorias' => function($query) {
+                $query->where('estado', true)->where('visible_combo', true)->orderBy('orden');
             }]);
             
             // If not admin, only return expense categories
@@ -84,8 +84,9 @@ class CategoriaController extends Controller
             
             $query = Categoria::where('tipo', $tipo)
                 ->where('estado', true)
+                ->where('visible_combo', true)
                 ->with(['campo', 'subcategorias' => function($query) {
-                    $query->where('estado', true)->orderBy('orden');
+                    $query->where('estado', true)->where('visible_combo', true)->orderBy('orden');
                 }])
                 ->orderBy('orden')
                 ->orderBy('nombre');
@@ -445,7 +446,7 @@ class CategoriaController extends Controller
                 ->where('tipo', 'Ingreso')
                 ->where('estado', true)
                 ->with(['campo', 'subcategorias' => function($query) {
-                    $query->where('estado', true)->orderBy('orden');
+                    $query->where('estado', true)->where('visible_combo', true)->orderBy('orden');
                 }])
                 ->first();
 
