@@ -485,11 +485,11 @@ class FormulaCalculatorService
 
         switch ($campo->tipo_resultado) {
             case 'PORCENTAJE':
-                // Convertir a porcentaje sin decimales (ej: 0.1 -> 10)
-                $percentageValue = round($roundedResult * 100, 0);
+                // Convertir a porcentaje sin decimales (ej: 0.87 -> 87, 0.1 -> 10)
+                // Multiplicar primero por 100, luego redondear para preservar precisión
+                $percentageValue = round($result * 100, 0);
                 Log::debug('[FormulaCalculatorService] Porcentaje formateado', [
                     'result_original' => $result,
-                    'result_rounded' => $roundedResult,
                     'percentage_value' => $percentageValue
                 ]);
                 return $percentageValue;
