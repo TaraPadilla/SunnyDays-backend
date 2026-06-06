@@ -68,6 +68,8 @@ Route::middleware(['auth:sanctum', PreventDemoUserWrites::class])->group(functio
     // Subcategorías
     Route::apiResource('subcategorias', SubcategoriaController::class);
     Route::post('/subcategorias/{id}/restore', [SubcategoriaController::class, 'restore']);
+    Route::get('/subcategorias/{id}/preview-categoria-change', [SubcategoriaController::class, 'previewCategoriaChange']);
+    Route::post('/subcategorias/{id}/mover-categoria', [SubcategoriaController::class, 'moveToCategoria']);
 
     // Gastos
     Route::apiResource('gastos', GastoController::class);
