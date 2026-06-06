@@ -4,6 +4,8 @@ namespace App\Http\Resources;
 
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
+use App\Http\Resources\CategoriaResource;
+use App\Http\Resources\SubcategoriaResource;
 
 class CampoResource extends JsonResource
 {
@@ -22,6 +24,8 @@ class CampoResource extends JsonResource
             'formula' => $this->formula,
             'estado' => $this->estado,
             'tipo_resultado' => $this->tipo_resultado,
+            'categorias' => CategoriaResource::collection($this->whenLoaded('categorias')),
+            'subcategorias' => SubcategoriaResource::collection($this->whenLoaded('subcategorias')),
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,
         ];

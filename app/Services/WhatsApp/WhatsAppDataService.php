@@ -94,11 +94,12 @@ class WhatsAppDataService
                 return [];
             }
 
-            // Filtrar por visible_combo (el controller ya filtra por tipo y estado)
+            // Filtrar por visible_combo y campo tipo_calculo SUM (el controller ya filtra por tipo y estado)
             $categories = collect($categoriasData['data'])
                 ->filter(function ($categoria) {
                     return ($categoria['tipo'] ?? null) === 'Egreso'
-                        && $categoria['visible_combo'] === true;
+                        && $categoria['visible_combo'] === true
+                        && data_get($categoria, 'campo.tipo_calculo') === 'SUM';
                 })
                 ->sortBy('orden')
                 ->sortBy('nombre')
@@ -226,6 +227,9 @@ class WhatsAppDataService
             $category = Categoria::where('tipo', 'Egreso')
                 ->where('estado', true)
                 ->where('visible_combo', true)
+                ->whereHas('campo', function ($query) {
+                    $query->where('tipo_calculo', 'SUM');
+                })
                 ->find($id);
             
             if (!$category) {

@@ -18,7 +18,9 @@ class CampoController extends Controller
         Log::info('[CampoController] index: petición recibida');
         
         try {
-            $campos = Campo::where('estado', true)->get();
+            $campos = Campo::where('estado', true)
+                ->with(['categorias', 'subcategorias.categoria'])
+                ->get();
             
             Log::info('[CampoController] index: éxito', ['total' => $campos->count()]);
             
