@@ -140,7 +140,15 @@ class FormulaCalculatorService
             // Sumar subtotales de todas las subcategorías
             $total = 0;
             foreach ($parentContext->subcategorias as $subcategoria) {
-                $total += self::calculateSubtotal($subcategoria);
+                $subtotalSubcategoria = self::calculateSubtotal($subcategoria);
+                Log::info('[FormulaCalculatorService] calculateSum: sumando subcategoría', [
+                    'categoria_id' => $parentContext->id,
+                    'categoria_nombre' => $parentContext->nombre,
+                    'subcategoria_id' => $subcategoria->id,
+                    'subcategoria_nombre' => $subcategoria->nombre,
+                    'subtotal_subcategoria' => $subtotalSubcategoria
+                ]);
+                $total += $subtotalSubcategoria;
             }
             
             Log::debug('[FormulaCalculatorService] calculateSum', [
@@ -179,12 +187,24 @@ class FormulaCalculatorService
                 }
             }
             
-            $total = round($query->sum('monto_total'), 0);
+            $gastos = $query->get();
+            $total = 0;
+            foreach ($gastos as $gasto) {
+                Log::info('[FormulaCalculatorService] calculateSum: sumando gasto', [
+                    'subcategoria_id' => $parentContext->id,
+                    'subcategoria_nombre' => $parentContext->nombre,
+                    'gasto_id' => $gasto->id,
+                    'gasto_descripcion' => $gasto->descripcion,
+                    'gasto_monto' => $gasto->monto_total
+                ]);
+                $total += $gasto->monto_total;
+            }
+            $total = round($total, 0);
             
             Log::debug('[FormulaCalculatorService] calculateSum', [
                 'type' => 'Subcategoria',
                 'subcategoria_id' => $parentContext->id,
-                'gastos_count' => $query->count(),
+                'gastos_count' => $gastos->count(),
                 'total' => $total,
                 'filters_applied' => self::$filters
             ]);
