@@ -18,6 +18,7 @@ class PreventDemoUserWrites
     private const ALLOWED_DEMO_PATHS = [
         'api/logout',
         'api/generar-balance',
+        'api/balances/recalcular-cambios',
     ];
 
     public function handle(Request $request, Closure $next): Response

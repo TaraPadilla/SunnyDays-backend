@@ -428,6 +428,142 @@ class GastoController extends Controller
     }
 
     /**
+     * Recalculate a balance from the edited snapshot sent by the frontend.
+     */
+    public function recalcularBalanceSnapshot(Request $request): JsonResponse
+    {
+        Log::info('[GastoController] recalcularBalanceSnapshot: peticiÃ³n recibida', [
+            'method' => $request->method(),
+            'path' => $request->path(),
+            'keys' => array_keys($request->all()),
+        ]);
+
+        try {
+            $jsonGastos = $request->input('json_gastos', ['categorias' => [], 'total' => 0]);
+
+            $contexto = [];
+            if ($request->filled('json_reservas')) {
+                $contexto = ReservasContextService::fromBalanceJson($request->input('json_reservas'));
+            }
+
+            FormulaCalculatorService::setContext($contexto);
+            FormulaCalculatorService::setSnapshot($jsonGastos);
+            FormulaCalculatorService::setFilters($request->only(['fecha_desde', 'fecha_hasta', 'inmueble_id']));
+
+            $categorias = [];
+            $total = 0;
+
+            foreach (($jsonGastos['categorias'] ?? []) as $categoriaSnapshot) {
+                $categoria = $this->findCategoriaFromSnapshot($categoriaSnapshot);
+
+                $categoriaJson = [
+                    'categoria_id' => $categoria?->id ?? ($categoriaSnapshot['categoria_id'] ?? $categoriaSnapshot['id'] ?? null),
+                    'categoria' => $categoria?->nombre ?? ($categoriaSnapshot['categoria'] ?? $categoriaSnapshot['nombre'] ?? ''),
+                    'subcategorias' => [],
+                    'campo_id' => $categoria?->campo?->id ?? ($categoriaSnapshot['campo_id'] ?? null),
+                    'clave' => $categoria?->campo?->clave ?? ($categoriaSnapshot['clave'] ?? null),
+                    'nombre_campo' => $categoria?->campo?->nombre ?? ($categoriaSnapshot['nombre_campo'] ?? null),
+                    'tipo_calculo' => $categoria?->campo?->tipo_calculo ?? ($categoriaSnapshot['tipo_calculo'] ?? null),
+                    'formula' => $categoria?->campo?->formula ?? ($categoriaSnapshot['formula'] ?? null),
+                    'tipo_resultado' => $categoria?->campo?->tipo_resultado ?? ($categoriaSnapshot['tipo_resultado'] ?? null),
+                ];
+
+                foreach (($categoriaSnapshot['subcategorias'] ?? []) as $subcategoriaSnapshot) {
+                    $subcategoria = $this->findSubcategoriaFromSnapshot($subcategoriaSnapshot);
+                    $monto = $subcategoria ? $subcategoria->subtotal() : (float) ($subcategoriaSnapshot['monto'] ?? $subcategoriaSnapshot['valor'] ?? 0);
+
+                    $categoriaJson['subcategorias'][] = [
+                        'subcategoria_id' => $subcategoria?->id ?? ($subcategoriaSnapshot['subcategoria_id'] ?? $subcategoriaSnapshot['id'] ?? null),
+                        'subcategoria' => $subcategoria ? ucfirst(strtolower($subcategoria->nombre)) : ($subcategoriaSnapshot['subcategoria'] ?? $subcategoriaSnapshot['nombre'] ?? ''),
+                        'monto' => $monto,
+                        'campo_id' => $subcategoria?->campo?->id ?? ($subcategoriaSnapshot['campo_id'] ?? null),
+                        'clave' => $subcategoria?->campo?->clave ?? ($subcategoriaSnapshot['clave'] ?? null),
+                        'nombre_campo' => $subcategoria?->campo?->nombre ?? ($subcategoriaSnapshot['nombre_campo'] ?? null),
+                        'tipo_calculo' => $subcategoria?->campo?->tipo_calculo ?? ($subcategoriaSnapshot['tipo_calculo'] ?? null),
+                        'formula' => $subcategoria?->campo?->formula ?? ($subcategoriaSnapshot['formula'] ?? null),
+                        'tipo_resultado' => $subcategoria?->campo?->tipo_resultado ?? ($subcategoriaSnapshot['tipo_resultado'] ?? null),
+                    ];
+
+                    $total += $monto;
+                }
+
+                if ($categoria && $categoria->visible_sum) {
+                    $categoriaJson['subtotal'] = $categoria->subtotal();
+                } elseif (array_key_exists('subtotal', $categoriaSnapshot)) {
+                    $categoriaJson['subtotal'] = $categoriaSnapshot['subtotal'];
+                }
+
+                $categorias[] = $categoriaJson;
+            }
+
+            FormulaCalculatorService::clearAll();
+
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Balance recalculado correctamente',
+                'data' => [
+                    'categorias' => $categorias,
+                    'total' => $total,
+                ],
+            ], 200);
+        } catch (\Exception $e) {
+            FormulaCalculatorService::clearAll();
+
+            Log::error('[GastoController] recalcularBalanceSnapshot: excepciÃ³n', [
+                'message' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
+
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Error al recalcular balance',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    private function findCategoriaFromSnapshot(array $categoriaSnapshot): ?\App\Models\Categoria
+    {
+        if (!empty($categoriaSnapshot['categoria_id'])) {
+            return \App\Models\Categoria::with(['campo', 'subcategorias.campo'])->find($categoriaSnapshot['categoria_id']);
+        }
+
+        if (!empty($categoriaSnapshot['campo_id'])) {
+            return \App\Models\Categoria::with(['campo', 'subcategorias.campo'])->where('campo_id', $categoriaSnapshot['campo_id'])->first();
+        }
+
+        if (!empty($categoriaSnapshot['clave'])) {
+            return \App\Models\Categoria::with(['campo', 'subcategorias.campo'])
+                ->whereHas('campo', fn ($query) => $query->whereRaw('LOWER(clave) = ?', [strtolower($categoriaSnapshot['clave'])]))
+                ->first();
+        }
+
+        $nombre = $categoriaSnapshot['categoria'] ?? $categoriaSnapshot['nombre'] ?? null;
+        return $nombre ? \App\Models\Categoria::with(['campo', 'subcategorias.campo'])->where('nombre', $nombre)->first() : null;
+    }
+
+    private function findSubcategoriaFromSnapshot(array $subcategoriaSnapshot): ?\App\Models\Subcategoria
+    {
+        if (!empty($subcategoriaSnapshot['subcategoria_id'])) {
+            return \App\Models\Subcategoria::with(['campo'])->find($subcategoriaSnapshot['subcategoria_id']);
+        }
+
+        if (!empty($subcategoriaSnapshot['campo_id'])) {
+            return \App\Models\Subcategoria::with(['campo'])->where('campo_id', $subcategoriaSnapshot['campo_id'])->first();
+        }
+
+        if (!empty($subcategoriaSnapshot['clave'])) {
+            return \App\Models\Subcategoria::with(['campo'])
+                ->whereHas('campo', fn ($query) => $query->whereRaw('LOWER(clave) = ?', [strtolower($subcategoriaSnapshot['clave'])]))
+                ->first();
+        }
+
+        $nombre = $subcategoriaSnapshot['subcategoria'] ?? $subcategoriaSnapshot['nombre'] ?? null;
+        return $nombre ? \App\Models\Subcategoria::with(['campo'])->where('nombre', $nombre)->first() : null;
+    }
+
+    /**
      * Store a newly created gasto in storage.
      */
     public function store(Request $request): JsonResponse

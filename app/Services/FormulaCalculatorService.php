@@ -25,6 +25,14 @@ class FormulaCalculatorService
     private static $filters = [];
 
     /**
+     * Foto editable del balance usada solo por el endpoint de recÃ¡lculo.
+     */
+    private static $snapshotMode = false;
+    private static $snapshotValuesByContext = [];
+    private static $snapshotValuesByClave = [];
+    private static $snapshotChildrenByCategory = [];
+
+    /**
      * Asigna el contexto externo para valores MANUAL
      */
     public static function setContext(array $context): void
@@ -45,12 +53,64 @@ class FormulaCalculatorService
     }
 
     /**
+     * Carga los valores visibles del balance para recalcular sin tocar la BD.
+     */
+    public static function setSnapshot(array $jsonGastos): void
+    {
+        self::$snapshotMode = true;
+        self::$snapshotValuesByContext = [];
+        self::$snapshotValuesByClave = [];
+        self::$snapshotChildrenByCategory = [];
+
+        foreach (($jsonGastos['categorias'] ?? []) as $categoria) {
+            $categoriaId = $categoria['categoria_id'] ?? $categoria['id'] ?? null;
+            $categoriaClave = isset($categoria['clave']) ? strtolower($categoria['clave']) : null;
+
+            foreach (($categoria['subcategorias'] ?? []) as $subcategoria) {
+                $valor = (float) ($subcategoria['monto'] ?? $subcategoria['valor'] ?? 0);
+                $subcategoriaId = $subcategoria['subcategoria_id'] ?? $subcategoria['id'] ?? null;
+                $subcategoriaClave = isset($subcategoria['clave']) ? strtolower($subcategoria['clave']) : null;
+
+                if ($subcategoriaId) {
+                    self::$snapshotValuesByContext[Subcategoria::class . ':' . $subcategoriaId] = $valor;
+                }
+
+                if ($subcategoriaClave) {
+                    self::$snapshotValuesByClave[$subcategoriaClave] = $valor;
+                }
+
+                if ($categoriaId) {
+                    self::$snapshotChildrenByCategory[Categoria::class . ':' . $categoriaId][] = $valor;
+                }
+
+                if ($categoriaClave) {
+                    self::$snapshotChildrenByCategory['clave:' . $categoriaClave][] = $valor;
+                }
+            }
+
+            if ($categoriaId && array_key_exists('subtotal', $categoria)) {
+                self::$snapshotValuesByContext[Categoria::class . ':' . $categoriaId] = (float) $categoria['subtotal'];
+            }
+
+            if ($categoriaClave && array_key_exists('subtotal', $categoria)) {
+                self::$snapshotValuesByClave[$categoriaClave] = (float) $categoria['subtotal'];
+            }
+        }
+
+        self::clearCache();
+    }
+
+    /**
      * Limpia el contexto y filtros
      */
     public static function clearAll(): void
     {
         self::$context = [];
         self::$filters = [];
+        self::$snapshotMode = false;
+        self::$snapshotValuesByContext = [];
+        self::$snapshotValuesByClave = [];
+        self::$snapshotChildrenByCategory = [];
         self::clearCache();
     }
 
@@ -106,6 +166,13 @@ class FormulaCalculatorService
             'campo_formula' => $campo->formula
         ]);
 
+        if (self::$snapshotMode && $campo->tipo_calculo !== 'COMPUESTA') {
+            $snapshotValue = self::getSnapshotValue($parentContext, $campo);
+            if ($snapshotValue !== null && !($parentContext instanceof Categoria && $campo->tipo_calculo === 'SUM')) {
+                return $snapshotValue;
+            }
+        }
+
         switch ($campo->tipo_calculo) {
             case 'SUM':
                 return self::calculateSum($parentContext);
@@ -137,6 +204,16 @@ class FormulaCalculatorService
     private static function calculateSum($parentContext): float
     {
         if ($parentContext instanceof Categoria) {
+            if (self::$snapshotMode) {
+                $total = 0;
+                foreach ($parentContext->subcategorias as $subcategoria) {
+                    if (self::snapshotHasContext($subcategoria, $subcategoria->campo)) {
+                        $total += self::calculateSubtotal($subcategoria);
+                    }
+                }
+
+                return $total;
+            }
             // Sumar subtotales de todas las subcategorías
             $total = 0;
             foreach ($parentContext->subcategorias as $subcategoria) {
@@ -160,6 +237,10 @@ class FormulaCalculatorService
             
             return $total;
         } elseif ($parentContext instanceof Subcategoria) {
+            if (self::$snapshotMode) {
+                return self::getSnapshotValue($parentContext, $parentContext->campo) ?? 0;
+            }
+
             // Sumar montos de todos los gastos aplicando filtros si existen
             $query = $parentContext->gastos();
             
@@ -422,6 +503,16 @@ class FormulaCalculatorService
         
         // Si el campo es de tipo MANUAL, obtener su valor del contexto externo
         if ($campo->tipo_calculo === 'MANUAL') {
+            if (self::$snapshotMode) {
+                $categoria = Categoria::where('campo_id', $campo->id)->first();
+                $subcategoria = Subcategoria::where('campo_id', $campo->id)->first();
+                $snapshotValue = self::getSnapshotValue($categoria ?: $subcategoria, $campo);
+
+                if ($snapshotValue !== null) {
+                    return $snapshotValue;
+                }
+            }
+
             $claveNormalizada = strtolower($campo->clave);
             $valor = isset(self::$context[$claveNormalizada]) 
                 ? (float) self::$context[$claveNormalizada] 
@@ -441,12 +532,20 @@ class FormulaCalculatorService
         $subcategoria = Subcategoria::where('campo_id', $campo->id)->first();
         
         if ($categoria) {
+            if (self::$snapshotMode && !self::snapshotHasContext($categoria, $campo)) {
+                return 0;
+            }
+
             Log::debug('[FormulaCalculatorService] Procesando campo con categoría', [
                 'clave' => $clave,
                 'categoria_id' => $categoria->id
             ]);
             return self::calculateSubtotal($categoria);
         } elseif ($subcategoria) {
+            if (self::$snapshotMode && !self::snapshotHasContext($subcategoria, $campo)) {
+                return 0;
+            }
+
             Log::debug('[FormulaCalculatorService] Procesando campo con subcategoría', [
                 'clave' => $clave,
                 'subcategoria_id' => $subcategoria->id
@@ -531,5 +630,37 @@ class FormulaCalculatorService
         $claveNormalizada = strtolower($clave);
 
         return isset(self::$context[$claveNormalizada]) ? (float) self::$context[$claveNormalizada] : 0;
+    }
+
+    private static function getSnapshotValue($parentContext, ?Campo $campo): ?float
+    {
+        if (!$parentContext || !$campo) {
+            return null;
+        }
+
+        $contextKey = get_class($parentContext) . ':' . $parentContext->id;
+        if (array_key_exists($contextKey, self::$snapshotValuesByContext)) {
+            return (float) self::$snapshotValuesByContext[$contextKey];
+        }
+
+        $clave = strtolower($campo->clave);
+        return array_key_exists($clave, self::$snapshotValuesByClave)
+            ? (float) self::$snapshotValuesByClave[$clave]
+            : null;
+    }
+
+    private static function snapshotHasContext($parentContext, ?Campo $campo): bool
+    {
+        if (!$parentContext || !$campo) {
+            return false;
+        }
+
+        $contextKey = get_class($parentContext) . ':' . $parentContext->id;
+        $clave = strtolower($campo->clave);
+
+        return array_key_exists($contextKey, self::$snapshotValuesByContext)
+            || array_key_exists($clave, self::$snapshotValuesByClave)
+            || array_key_exists($contextKey, self::$snapshotChildrenByCategory)
+            || array_key_exists('clave:' . $clave, self::$snapshotChildrenByCategory);
     }
 }

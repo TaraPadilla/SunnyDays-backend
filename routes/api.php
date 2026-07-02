@@ -76,6 +76,7 @@ Route::middleware(['auth:sanctum', PreventDemoUserWrites::class])->group(functio
     Route::get('/gastos-filtrados', [GastoController::class, 'gastosFiltrados']);
     Route::get('/generar-balance', [GastoController::class, 'generarBalance']);
     Route::post('/generar-balance', [GastoController::class, 'generarBalance']);
+    Route::post('/balances/recalcular-cambios', [GastoController::class, 'recalcularBalanceSnapshot']);
     Route::post('/gastos/{id}/restore', [GastoController::class, 'restore']);
 
     // Soportes de Gastos (rutas fijas antes del apiResource para no capturarlas como {soporte_gasto})
